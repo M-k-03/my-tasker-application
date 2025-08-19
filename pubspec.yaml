@@ -35,7 +35,6 @@ dependencies:
   intl: ^0.18.1 # Moved from dev_dependencies
   firebase_core: ^2.30.0
   cloud_firestore: ^4.17.0
-  flutter_native_splash: ^2.4.0 # Added this line (or latest)
   flutter_exit_app: ^1.0.0 # Added this line (or latest)
   mobile_scanner: ^7.0.1
   uuid: ^4.5.1
@@ -103,15 +102,3 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
-
-flutter_native_splash:
-  color: "#FFFFFF"
-  image: assets/images/app_logo.jpg
-  android_12:
-    image: assets/images/app_logo.jpg
-    color: "#FFFFFF" # Optional: A different background color for A12+ splash icon
-    icon_background_color: "#FFFFFF" # Optional: Background for the icon itself on A12+
-
-  android: true
-  ios: true
-  web: false

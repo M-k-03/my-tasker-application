@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart'; // Import Firebase Core
-import 'views/screens/menu_screen.dart'; // Updated import path for MenuScreen
+import 'package:my_tasker/views/screens/menu_screen.dart';
+// import 'views/screens/menu_screen.dart'; // No longer the first screen
+import 'views/splash_screen.dart'; // IMPORT SplashScreen
 
 Future<void> main() async { // Make main async
   WidgetsFlutterBinding.ensureInitialized(); // Ensure widgets are initialized
-  await Firebase.initializeApp(); // Initialize Firebase
+  print("Before Firebase init");
+   await Firebase.initializeApp();
+  print("After Firebase init");
   runApp(const MyApp());
 }
 
@@ -19,7 +23,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         scaffoldBackgroundColor: Colors.white,
       ),
-      home: const MenuScreen(), // Set MenuScreen as home
+      home: const MenuScreen(), // Replace with your first screen
       debugShowCheckedModeBanner: false,
     );
   }

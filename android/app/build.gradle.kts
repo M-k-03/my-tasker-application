@@ -6,19 +6,6 @@ plugins {
     id("com.google.gms.google-services")
 }
 
-dependencies {
-    // Import the Firebase BoM
-    implementation(platform("com.google.firebase:firebase-bom:34.1.0"))
-
-
-    // TODO: Add the dependencies for Firebase products you want to use
-    // When using the BoM, don't specify versions in Firebase dependencies
-    implementation("com.google.firebase:firebase-analytics")
-
-
-    // Add the dependencies for any other desired Firebase products
-    // https://firebase.google.com/docs/android/setup#available-libraries
-}
 android {
     namespace = "com.mk.my_tasker"
     compileSdk = flutter.compileSdkVersion
@@ -38,7 +25,7 @@ android {
         applicationId = "com.mk.my_tasker"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion // Corrected line
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

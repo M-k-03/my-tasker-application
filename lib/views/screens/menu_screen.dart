@@ -12,22 +12,22 @@ class MenuScreen extends StatelessWidget {
   static final List<_MenuItem> _menuItems = [ 
     _MenuItem(
       title: 'Product Catalog', 
-      imagePath: 'assets/images/add_product_icon.png', 
+      imagePath: 'assets/images/add_product_icon.png',
       targetScreen: const ProductCatalogManagementScreen(), // UPDATED to new screen
     ),
     _MenuItem(
       title: 'Analytics',
-      imagePath: 'assets/images/analytics_icon.png', 
+      imagePath: 'assets/images/analytics_icon.png',
       targetScreen: const AnalyticsScreen(),
     ),
     _MenuItem(
       title: 'Stock Management',
-      imagePath: 'assets/images/stock_management_icon.png', 
+      imagePath: 'assets/images/stock_management_icon.png',
       targetScreen: const StockManagementScreen(),
     ),
     _MenuItem(
       title: 'Settings',
-      imagePath: 'assets/images/settings_icon.png', 
+      imagePath: 'assets/images/settings_icon.png',
       targetScreen: const SettingsScreen(),
     ),
   ];
