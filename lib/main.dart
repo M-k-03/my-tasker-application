@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart'; // Import Firebase Core
-import 'views/splash_screen.dart'; // Import SplashScreen
+import 'views/screens/menu_screen.dart'; // Updated import path for MenuScreen
 
 Future<void> main() async { // Make main async
   WidgetsFlutterBinding.ensureInitialized(); // Ensure widgets are initialized
@@ -19,7 +19,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         scaffoldBackgroundColor: Colors.white,
       ),
-      home: const SplashScreen(),
+      home: const MenuScreen(), // Set MenuScreen as home
       debugShowCheckedModeBanner: false,
     );
   }
