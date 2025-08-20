@@ -18,7 +18,7 @@ class _DefineProductFormState extends State<DefineProductForm> {
   final _skuController = TextEditingController(); // SKU is also barcode
 
   String? _selectedUnit;
-  final List<String> _unitOptions = ['KGS', 'Litre', 'ML', 'Pcs'];
+  final List<String> _unitOptions = ['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'set', 'roll', 'meter', 'feet', 'units', 'packet']; // MODIFIED
   var uuid = const Uuid();
 
   bool _isSkuEditable = true;
@@ -88,7 +88,16 @@ class _DefineProductFormState extends State<DefineProductForm> {
 
       try {
         // Check for duplicate SKU
-        final sku = _skuController.text;
+        final sku = _skuController.text.trim(); // Also trim SKU just in case
+        final productName = _productNameController.text.trim(); // TRIM HERE
+
+        // Validate trimmed product name is not empty if it wasn't already caught by validator
+        if (productName.isEmpty) {
+          Fluttertoast.showToast(msg: "Product name cannot be empty after trimming spaces.");
+          setState(() { _isLoading = false; });
+          return;
+        }
+
         final querySnapshot = await FirebaseFirestore.instance
             .collection('master_products')
             .where('sku', isEqualTo: sku)
@@ -103,11 +112,11 @@ class _DefineProductFormState extends State<DefineProductForm> {
 
         // No duplicate, proceed to add
         await FirebaseFirestore.instance.collection('master_products').add({
-          'productName': _productNameController.text,
+          'productName': productName, // Use trimmed productName
           'units': _selectedUnit,
           'price': double.tryParse(_priceController.text) ?? 0.0,
-          'sku': _skuController.text, // This is also the barcode
-          'barcode': _skuController.text, // Explicitly store barcode if needed for other queries
+          'sku': sku, // Use trimmed sku
+          'barcode': sku, // Explicitly store barcode if needed for other queries
           'isManuallyAddedSku': !_isSkuEditable, // A way to track if SKU was from scan/manual
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -143,7 +152,11 @@ class _DefineProductFormState extends State<DefineProductForm> {
             TextFormField(
               controller: _productNameController,
               decoration: const InputDecoration(labelText: 'Product Name', border: OutlineInputBorder()),
-              validator: (value) => (value == null || value.isEmpty) ? 'Please enter a product name' : null,
+              validator: (value) {
+                if (value == null || value.isEmpty) return 'Please enter a product name';
+                if (value.trim().isEmpty) return 'Product name cannot be only spaces'; // Added validator for spaces
+                return null;
+              },
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
@@ -171,6 +184,7 @@ class _DefineProductFormState extends State<DefineProductForm> {
               controller: _skuController,
               decoration: const InputDecoration(labelText: 'SKU / Barcode', border: OutlineInputBorder()),
               readOnly: !_isSkuEditable,
+              // It's also good practice to trim SKU if manually entered, handled in _submitForm
             ),
             const SizedBox(height: 12),
             Row(
