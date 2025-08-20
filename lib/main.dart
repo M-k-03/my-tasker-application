@@ -6,9 +6,7 @@ import 'views/splash_screen.dart'; // IMPORT SplashScreen
 
 Future<void> main() async { // Make main async
   WidgetsFlutterBinding.ensureInitialized(); // Ensure widgets are initialized
-  print("Before Firebase init");
    await Firebase.initializeApp();
-  print("After Firebase init");
   runApp(const MyApp());
 }
 
