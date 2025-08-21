@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:my_tasker/views/screens/purchase_entry_screen.dart'; // Import the PurchaseEntryScreen
 import 'package:my_tasker/views/screens/purchase_history_screen.dart'; // Import PurchaseHistoryScreen
 import 'package:my_tasker/views/screens/edit_delete_purchase_entry_screen.dart'; // Import the new placeholder screen
+import 'package:my_tasker/views/screens/view_stock_screen.dart'; // Import the new ViewStockScreen
 
 class StockManagementScreen extends StatelessWidget {
   const StockManagementScreen({super.key});
@@ -42,6 +43,26 @@ class StockManagementScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
+                  // New "View Current Stock" button added here
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.inventory_2_outlined),
+                    label: const Text('View Current Stock'),
+                    style: commonButtonStyle.copyWith(
+                      // Using a distinct color, e.g., Green, or choose another like Colors.purple
+                      backgroundColor: MaterialStateProperty.all(Colors.green),
+                      foregroundColor: MaterialStateProperty.all(Colors.white),
+                    ),
+                    onPressed: () {
+                      // Navigate to ViewStockScreen
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ViewStockScreen()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 25), // Adjusted spacing, consistent with others
+
+                  // Existing buttons - their code remains untouched
                   ElevatedButton.icon(
                     icon: const Icon(Icons.add_shopping_cart),
                     label: const Text('Add Purchase Entry'),
