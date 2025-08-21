@@ -4,34 +4,36 @@ import 'package:my_tasker/views/screens/analytics_screen.dart';
 import 'package:my_tasker/views/screens/stock_management_screen.dart';
 import 'package:my_tasker/views/screens/settings_screen.dart';
 import 'package:my_tasker/views/screens/product_catalog_management_screen.dart'; // IMPORT ADDED
+import 'package:my_tasker/views/screens/sale_entry_screen.dart'; // Added for Sale Entry
 
 class MenuScreen extends StatelessWidget {
   const MenuScreen({super.key});
 
   // Helper class to structure menu item data
-  static final List<_MenuItem> _menuItems = [ 
+  static final List<_MenuItem> _menuItems = [
     _MenuItem(
-      title: 'Product Catalog', 
+      title: 'Product Catalog',
       imagePath: 'assets/images/add_product_icon.png',
-      //imagePath:'',
-      targetScreen: const ProductCatalogManagementScreen(), // UPDATED to new screen
+      targetScreen: const ProductCatalogManagementScreen(),
     ),
     _MenuItem(
       title: 'Analytics',
       imagePath: 'assets/images/analytics_icon.png',
-      //imagePath:'',
       targetScreen: const AnalyticsScreen(),
     ),
     _MenuItem(
       title: 'Stock Management',
       imagePath: 'assets/images/stock_management_icon.png',
-      //imagePath:'',
       targetScreen: const StockManagementScreen(),
+    ),
+    _MenuItem(
+      title: 'Sale Entry', // New Menu Item
+      imagePath: 'assets/images/sale-entry.png', // New Image
+      targetScreen: const SaleEntryScreen(), // New Screen
     ),
     _MenuItem(
       title: 'Settings',
       imagePath: 'assets/images/settings_icon.png',
-      //imagePath:'',
       targetScreen: const SettingsScreen(),
     ),
   ];
@@ -41,7 +43,7 @@ class MenuScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Main Menu'),
-        centerTitle: true, 
+        centerTitle: true,
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         automaticallyImplyLeading: false,
         actions: <Widget>[
@@ -54,22 +56,22 @@ class MenuScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Container( 
+      body: Container(
         decoration: const BoxDecoration(
           image: DecorationImage(
-            image: AssetImage('assets/images/menu-bg.jpg'), 
-            fit: BoxFit.cover, 
+            image: AssetImage('assets/images/menu-bg.jpg'),
+            fit: BoxFit.cover,
           ),
         ),
-        child: Padding( 
-          padding: const EdgeInsets.only(top: 24.0, left: 8.0, right: 8.0, bottom: 8.0), 
+        child: Padding(
+          padding: const EdgeInsets.only(top: 24.0, left: 8.0, right: 8.0, bottom: 8.0),
           child: GridView.builder(
             itemCount: _menuItems.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, 
-              crossAxisSpacing: 10.0, 
-              mainAxisSpacing: 10.0, 
-              childAspectRatio: 1.0, 
+              crossAxisCount: 2,
+              crossAxisSpacing: 10.0,
+              mainAxisSpacing: 10.0,
+              childAspectRatio: 1.0,
             ),
             itemBuilder: (BuildContext context, int index) {
               final menuItem = _menuItems[index];
@@ -78,7 +80,6 @@ class MenuScreen extends StatelessWidget {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
                 child: InkWell(
                   onTap: () {
-                    // Simplified navigation
                     Navigator.push(context, MaterialPageRoute(builder: (context) => menuItem.targetScreen));
                   },
                   borderRadius: BorderRadius.circular(8.0),
@@ -87,12 +88,12 @@ class MenuScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: <Widget>[
                       Expanded(
-                        flex: 2, 
+                        flex: 2,
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
                           child: Image.asset(
                             menuItem.imagePath,
-                            fit: BoxFit.contain, 
+                            fit: BoxFit.contain,
                             errorBuilder: (context, error, stackTrace) {
                               return const Icon(Icons.broken_image, size: 40, color: Colors.grey);
                             },
@@ -100,7 +101,7 @@ class MenuScreen extends StatelessWidget {
                         ),
                       ),
                       Expanded(
-                        flex: 1, 
+                        flex: 1,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4.0),
                           child: Text(
@@ -127,11 +128,11 @@ class MenuScreen extends StatelessWidget {
 class _MenuItem {
   final String title;
   final String imagePath;
-  final Widget targetScreen; 
+  final Widget targetScreen;
 
   const _MenuItem({
     required this.title,
     required this.imagePath,
-    required this.targetScreen, // CORRECTED LINE
+    required this.targetScreen,
   });
 }
