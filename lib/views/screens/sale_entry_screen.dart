@@ -31,11 +31,7 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
     _searchController.addListener(_onSearchChanged);
     _searchFocusNode.addListener(() {
       if (!_searchFocusNode.hasFocus && _searchResults.isNotEmpty) {
-        // if (_searchController.text.isEmpty) {
-        //   setState(() {
-        //     _searchResults = [];
-        //   });
-        // }
+        // Optional: clear search or other logic when focus is lost
       }
     });
     _loadFrequentItems();
@@ -46,25 +42,40 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
     setState(() {
       _isLoadingFrequentItems = true;
     });
+    print("DEBUG SaleEntryScreen: _loadFrequentItems() called. _isLoadingFrequentItems = true.");
+
     try {
+      print("DEBUG SaleEntryScreen: Calling _productService.getInitialProducts(limit: 20).");
       List<Product> initialProducts = await _productService.getInitialProducts(limit: 20);
+      print("DEBUG SaleEntryScreen: _productService.getInitialProducts() returned ${initialProducts.length} products.");
+
       if (mounted) {
         if (initialProducts.isNotEmpty) {
           final random = Random();
           initialProducts.shuffle(random);
           setState(() {
             _frequentItems = initialProducts.take(6).toList();
+            print("DEBUG SaleEntryScreen: _frequentItems set with ${_frequentItems.length} items.");
+          });
+        } else {
+          print("DEBUG SaleEntryScreen: No initial products returned by service, or list was empty.");
+          setState(() {
+            _frequentItems = []; // Explicitly set to empty
+            print("DEBUG SaleEntryScreen: _frequentItems set to empty.");
           });
         }
         setState(() {
           _isLoadingFrequentItems = false;
+          print("DEBUG SaleEntryScreen: _isLoadingFrequentItems set to false.");
         });
       }
     } catch (e) {
+      print("Error loading frequent items in SaleEntryScreen: $e");
       if (mounted) {
-        print("Error loading frequent items: $e");
         setState(() {
           _isLoadingFrequentItems = false;
+          _frequentItems = []; // Ensure frequentItems is empty on error
+          print("DEBUG SaleEntryScreen: _isLoadingFrequentItems set to false due to error. _frequentItems set to empty.");
         });
       }
     }
@@ -208,8 +219,17 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
       for (var itemInCart in _cartItems) {
         if (itemInCart.quantityToSell <= 0) continue;
 
+        if (itemInCart.id == null) {
+          print('Error: Product ID is null for ${itemInCart.productName}. Skipping sale entry for this item.');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Skipped ${itemInCart.productName} from sale: Missing Product ID.')),
+          );
+          continue;
+        }
+
+        // 1. Record Sale Entry
         SaleEntry saleEntry = SaleEntry(
-          productId: itemInCart.id,
+          productId: itemInCart.id!,
           productName: itemInCart.productName,
           sku: itemInCart.sku,
           quantitySold: itemInCart.quantityToSell,
@@ -219,6 +239,8 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
         );
         DocumentReference saleDocRef = firestore.collection('sale_entries').doc();
         batch.set(saleDocRef, saleEntry.toMap());
+
+        // Stock update in master_products is REMOVED as per Option 2
       }
 
       await batch.commit();
@@ -227,8 +249,8 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
         _cartItems = [];
         _calculateGrandTotal();
         _isLoadingSale = false;
-        _frequentItems = List<Product>.from(_frequentItems);
-        if(_searchController.text.isNotEmpty) _onSearchChanged();
+        // _frequentItems = List<Product>.from(_frequentItems); // No longer needed to refresh based on stock
+        // if(_searchController.text.isNotEmpty) _onSearchChanged(); // No longer needed to refresh based on stock
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -296,6 +318,7 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
                     tooltip: 'View Cart (${_cartItems.length})',
                     onPressed: () {
                       print('Cart icon tapped. Items: ${_cartItems.length}');
+                      // Potentially navigate to a cart details screen if you have one
                     },
                   ),
                   if (_cartItems.isNotEmpty)
@@ -433,7 +456,12 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Center(child: Text('No products found for "$currentSearchText".', style: TextStyle(fontSize: 16, color: Colors.grey[600]))),
-                ),
+                )
+              else if (!showInitialLoadingIndicator && _frequentItems.isEmpty && !hasSearchText) // Added condition for no frequent items
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Center(child: Text('No frequent items to display.', style: TextStyle(fontSize: 16, color: Colors.grey[600]))),
+                  ),
 
           if (_cartItems.isNotEmpty)
             Padding(
@@ -470,7 +498,13 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
                       ? Padding(
                     padding: const EdgeInsets.only(top: 16.0, left: 16, right: 16),
                     child: Center(
-                      child: Text(
+                      child: (_frequentItems.isEmpty && !hasSearchText)
+                          ? Text( // Message if no frequent items and no search
+                        'No products available to display. Try searching or ensure frequent items are loaded.',
+                        style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                        textAlign: TextAlign.center,
+                      )
+                          : Text( // Original message if frequent items section was attempted or there's search
                         'Search or add from frequent items to build a cart.',
                         style: TextStyle(fontSize: 18, color: Colors.grey[600]),
                         textAlign: TextAlign.center,
@@ -565,7 +599,6 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
                                   : const Text('Complete Sale', style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold, color: Colors.white)),
                             ),
                           ),
-                          // MODIFIED: Added SizedBox for space below the button
                           const SizedBox(height: 50.0),
                         ],
                       ),
@@ -587,4 +620,3 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
     super.dispose();
   }
 }
-
