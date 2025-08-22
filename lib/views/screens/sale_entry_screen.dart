@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fluttertoast/fluttertoast.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+
 import 'package:my_tasker/models/product.dart';
 import 'package:my_tasker/models/sale_entry.dart';
+import 'package:my_tasker/models/cart_item.dart'; // Added import for CartItem
 import 'package:my_tasker/services/product_service.dart';
-import 'dart:math'; // Required for shuffle
+import 'package:my_tasker/services/sale_service.dart';
+import 'package:my_tasker/utils/app_colors.dart';
+import 'package:my_tasker/utils/validators.dart';
+import 'package:my_tasker/views/widgets/custom_app_bar.dart';
+import 'package:my_tasker/views/widgets/custom_button.dart';
+import 'package:my_tasker/views/widgets/custom_text_field.dart';
 
 class SaleEntryScreen extends StatefulWidget {
   const SaleEntryScreen({super.key});
@@ -14,609 +23,676 @@ class SaleEntryScreen extends StatefulWidget {
 
 class _SaleEntryScreenState extends State<SaleEntryScreen> {
   final ProductService _productService = ProductService();
-  List<Product> _searchResults = [];
-  List<Product> _cartItems = [];
-  List<Product> _frequentItems = [];
-  bool _isLoadingFrequentItems = true;
-  bool _isSearchingProducts = false;
-
+  final SaleService _saleService = SaleService();
   final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
-  double _grandTotal = 0.0;
-  bool _isLoadingSale = false;
+  final TextEditingController _customerNameController = TextEditingController();
+  final TextEditingController _customerMobileController = TextEditingController();
+  final GlobalKey<FormState> _customerFormKey = GlobalKey<FormState>();
+
+  MobileScannerController? _scannerController;
+
+  List<Product> _frequentlyPurchasedProducts = [];
+  List<Product> _searchResults = [];
+  List<CartItem> _cart = [];
+  bool _isLoading = false;
+  bool _showFrequentItems = true;
+  bool _isFrequentProductsExpanded = false; // MODIFIED: Added state for expansion
+
+  // UI Feedback State
+  String _uiFeedbackMessage = '';
+  Color _uiFeedbackMessageColor = AppColors.textColor; // Default color
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(_onSearchChanged);
-    _searchFocusNode.addListener(() {
-      if (!_searchFocusNode.hasFocus && _searchResults.isNotEmpty) {
-        // Optional: clear search or other logic when focus is lost
-      }
-    });
-    _loadFrequentItems();
-  }
-
-  Future<void> _loadFrequentItems() async {
-    if (!mounted) return;
-    setState(() {
-      _isLoadingFrequentItems = true;
-    });
-    print("DEBUG SaleEntryScreen: _loadFrequentItems() called. _isLoadingFrequentItems = true.");
-
-    try {
-      print("DEBUG SaleEntryScreen: Calling _productService.getInitialProducts(limit: 20).");
-      List<Product> initialProducts = await _productService.getInitialProducts(limit: 20);
-      print("DEBUG SaleEntryScreen: _productService.getInitialProducts() returned ${initialProducts.length} products.");
-
-      if (mounted) {
-        if (initialProducts.isNotEmpty) {
-          final random = Random();
-          initialProducts.shuffle(random);
-          setState(() {
-            _frequentItems = initialProducts.take(6).toList();
-            print("DEBUG SaleEntryScreen: _frequentItems set with ${_frequentItems.length} items.");
-          });
-        } else {
-          print("DEBUG SaleEntryScreen: No initial products returned by service, or list was empty.");
-          setState(() {
-            _frequentItems = []; // Explicitly set to empty
-            print("DEBUG SaleEntryScreen: _frequentItems set to empty.");
-          });
-        }
-        setState(() {
-          _isLoadingFrequentItems = false;
-          print("DEBUG SaleEntryScreen: _isLoadingFrequentItems set to false.");
-        });
-      }
-    } catch (e) {
-      print("Error loading frequent items in SaleEntryScreen: $e");
-      if (mounted) {
-        setState(() {
-          _isLoadingFrequentItems = false;
-          _frequentItems = []; // Ensure frequentItems is empty on error
-          print("DEBUG SaleEntryScreen: _isLoadingFrequentItems set to false due to error. _frequentItems set to empty.");
-        });
-      }
-    }
-  }
-
-  void _onSearchChanged() {
-    final searchText = _searchController.text;
-    if (searchText.isNotEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _isSearchingProducts = true;
-        _searchResults = [];
-      });
-      _productService.searchProducts(searchText).then((products) {
-        if (mounted) {
-          setState(() {
-            _searchResults = products
-                .where((p) => !_cartItems.any((cartItem) => cartItem.id == p.id))
-                .toList();
-            _isSearchingProducts = false;
-          });
-        }
-      }).catchError((error) {
-        if (mounted) {
-          setState(() {
-            _isSearchingProducts = false;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error searching products: $error')),
-          );
-        }
-      });
-    } else {
-      if (mounted) {
-        setState(() {
-          _searchResults = [];
-          _isSearchingProducts = false;
-        });
-      }
-    }
-  }
-
-  void _addToCart(Product product) {
-    final int quantityBeingAddedToCart = 1;
-
-    setState(() {
-      final existingCartItemIndex = _cartItems.indexWhere((item) => item.id == product.id);
-      if (existingCartItemIndex != -1) {
-        _cartItems[existingCartItemIndex].quantityToSell += quantityBeingAddedToCart;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Increased quantity for ${product.productName} in the cart.')),
-        );
+    _scannerController = MobileScannerController(
+      // autoStart: false, // Default is true, MobileScanner widget will handle starting
+    );
+    _loadFrequentlyPurchasedProducts();
+    _searchController.addListener(() {
+      if (_searchController.text.isEmpty) {
+        _searchProducts(''); // Clear search results and show frequent items
+        _clearUiFeedback(); // Clear feedback when search is cleared
       } else {
-        Product cartProduct = Product(
-          id: product.id,
-          productName: product.productName,
-          price: product.price,
-          category: product.category,
-          sku: product.sku,
-          barcode: product.barcode,
-          units: product.units,
-          createdAt: product.createdAt,
-          isManuallyAddedSku: product.isManuallyAddedSku,
-          currentStock: product.currentStock,
-          imageUrl: product.imageUrl,
-          quantityToSell: quantityBeingAddedToCart,
-        );
-        _cartItems.add(cartProduct);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${product.productName} added to cart.')),
-        );
-      }
-      _calculateGrandTotal();
-
-      if (_searchController.text.isNotEmpty && !_searchResults.any((p) => p.id == product.id)) {
-        _searchController.clear();
-      }
-      _searchFocusNode.unfocus();
-      _frequentItems = List<Product>.from(_frequentItems);
-      if (_searchController.text.isNotEmpty) {
-        _onSearchChanged();
+        _searchProducts(_searchController.text);
       }
     });
   }
 
-  void _removeFromCart(Product product) {
+  void _setUiFeedback(String message, Color color) {
+    if (mounted) {
+      setState(() {
+        _uiFeedbackMessage = message;
+        _uiFeedbackMessageColor = color;
+      });
+    }
+  }
+
+  void _clearUiFeedback() {
+    if (mounted) {
+      setState(() {
+        _uiFeedbackMessage = '';
+      });
+    }
+  }
+
+  // MODIFIED: Added toggle function
+  void _toggleFrequentProductsExpansion() {
     setState(() {
-      if (product.id == null) return;
-      _cartItems.removeWhere((item) => item.id == product.id);
-      _calculateGrandTotal();
-      _frequentItems = List<Product>.from(_frequentItems);
-      if(_searchController.text.isNotEmpty){
-        _onSearchChanged();
-      }
+      _isFrequentProductsExpanded = !_isFrequentProductsExpanded;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${product.productName} removed from cart.'),
-        backgroundColor: Colors.redAccent,
+  }
+
+  Widget _buildFeedbackWidget() {
+    if (_uiFeedbackMessage.isEmpty) {
+      return const SizedBox.shrink(); // Return an empty widget if no message
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+      child: Text(
+        _uiFeedbackMessage,
+        style: TextStyle(color: _uiFeedbackMessageColor, fontStyle: FontStyle.italic),
+        textAlign: TextAlign.center,
       ),
     );
   }
 
-  void _updateQuantityInCart(Product product, int newQuantity) {
-    if (newQuantity <= 0) {
-      _removeFromCart(product);
+  Future<void> _loadFrequentlyPurchasedProducts() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      _frequentlyPurchasedProducts = await _productService.getFrequentlyPurchasedProducts(limit: 10); // Still fetch 10, display 3 or 7
+      print('Fetched frequently purchased: $_frequentlyPurchasedProducts');
+      if (mounted) {
+        for (var p in _frequentlyPurchasedProducts) {
+          print('Frequent Product: ${p.productName}, Stock: ${p.currentStock}');
+        }
+      }
+      _clearUiFeedback();
+    } catch (e) {
+      print('Error loading frequent items: $e');
+      _setUiFeedback("Error loading frequent items: ${e.toString()}", Colors.red);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _searchProducts(String query) async {
+    if (!mounted) return;
+    _clearUiFeedback();
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _showFrequentItems = true;
+      });
       return;
     }
     setState(() {
-      final index = _cartItems.indexWhere((item) => item.id == product.id);
-      if (index != -1) {
-        _cartItems[index].quantityToSell = newQuantity;
-        _calculateGrandTotal();
+      _isLoading = true;
+      _showFrequentItems = false;
+    });
+    try {
+      final String queryLowercase = query.toLowerCase();
+      _searchResults = await _productService.searchProducts(queryLowercase);
+      if (_searchResults.isEmpty && query.isNotEmpty) {
+        _setUiFeedback("No products found for '$query'.", AppColors.textColor);
       }
+    } catch (e) {
+      _setUiFeedback("Error searching products: ${e.toString()}", Colors.red);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _scanBarcode() async {
+    if (!mounted) return;
+    _clearUiFeedback();
+    try {
+      if (_scannerController == null) {
+        _setUiFeedback("Scanner controller not initialized. Please try again or restart the screen.", Colors.red);
+        return;
+      }
+
+      await showDialog<void>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Scan Barcode'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 300,
+              child: MobileScanner(
+                controller: _scannerController,
+                onDetect: (BarcodeCapture capture) {
+                  if (!mounted) return;
+                  final List<Barcode> barcodes = capture.barcodes;
+                  if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
+                    final String scannedValue = barcodes.first.rawValue!;
+                    _scannerController?.stop();
+                    Navigator.of(context).pop();
+                    _handleScannedBarcode(scannedValue);
+                  }
+                },
+                errorBuilder: (context, error) {
+                  return Center(child: Text('Error starting camera: ${error.toString()}'));
+                },
+              ),
+            ),
+            actions: <Widget>[
+              TextButton(
+                child: const Text('Cancel'),
+                onPressed: () {
+                  if(mounted) {
+                    _scannerController?.stop();
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
+            ],
+          );
+        },
+      ).then((_) {
+        if (_scannerController !=null && _scannerController!.value.isRunning){
+          _scannerController!.stop();
+        }
+      });
+    } catch (e) {
+      _setUiFeedback("Error opening scanner: ${e.toString()}", Colors.red);
+    }
+  }
+
+  Future<void> _handleScannedBarcode(String barcodeValue) async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      List<Product> productsFound = await _productService.searchProducts(barcodeValue);
+
+      if (productsFound.isEmpty) {
+        _setUiFeedback("Product with barcode '$barcodeValue' not found.", Colors.orangeAccent);
+      } else if (productsFound.length == 1) {
+        final product = productsFound.first;
+        if (product.currentStock <= 0) {
+          _setUiFeedback("${product.productName} is out of stock.", Colors.orangeAccent);
+        } else {
+          _addToCart(product);
+          _setUiFeedback("${product.productName} added to cart.", Colors.green);
+          _searchController.clear();
+        }
+      } else {
+        _setUiFeedback("Multiple products found for this barcode. Please search manually.", Colors.orangeAccent);
+      }
+    } catch (e) {
+      _setUiFeedback("Error processing barcode: ${e.toString()}", Colors.red);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+
+  void _addToCart(Product product) {
+    print('Attempting to add to cart: ${product.productName}, Stock: ${product.currentStock}');
+    if (!mounted) {
+      print('_addToCart: not mounted');
+      return;
+    }
+    _clearUiFeedback();
+    if (product.currentStock <= 0) {
+      print('${product.productName} is out of stock.');
+      _setUiFeedback("${product.productName} is out of stock.", Colors.orangeAccent);
+      return;
+    }
+
+    final int existingItemIndex = _cart.indexWhere((item) => item.productId == product.id);
+    print('Existing item index: $existingItemIndex');
+
+    print('Calling setState in _addToCart for ${product.productName}');
+    setState(() {
+      if (existingItemIndex != -1) {
+        if (_cart[existingItemIndex].quantity < product.currentStock) {
+          _cart[existingItemIndex].quantity++;
+          _setUiFeedback("${product.productName} quantity updated in cart.", Colors.green);
+        } else {
+          _setUiFeedback("Max stock reached for ${product.productName}.", Colors.orangeAccent);
+        }
+      } else {
+        _cart.add(CartItem(
+          productId: product.id,
+          productName: product.productName,
+          price: product.price,
+          quantity: 1,
+          sku: product.sku,
+          currentStock: product.currentStock,
+        ));
+        _setUiFeedback("${product.productName} added to cart.", Colors.green);
+      }
+      print('Cart after update: $_cart');
+    });
+    print('Finished _addToCart for ${product.productName}');
+  }
+
+  void _removeCartItem(int index) {
+    if (!mounted) return;
+    setState(() {
+      _setUiFeedback("${_cart[index].productName} removed from cart.", AppColors.textColor);
+      _cart.removeAt(index);
     });
   }
 
-  void _calculateGrandTotal() {
-    _grandTotal = _cartItems.fold(0.0, (sum, item) {
-      return sum + (item.price * item.quantityToSell);
-    });
+  void _updateCartItemQuantity(int index, int newQuantity) {
+    if (!mounted) return;
+    _clearUiFeedback();
+    final item = _cart[index];
+    if (newQuantity <= 0) {
+      _removeCartItem(index);
+    } else if (newQuantity > item.currentStock) {
+      _setUiFeedback("Only ${item.currentStock} units of ${item.productName} available.", Colors.orangeAccent);
+    }
+    else {
+      setState(() {
+        _cart[index].quantity = newQuantity;
+        _setUiFeedback("${item.productName} quantity updated.", Colors.green);
+      });
+    }
+  }
+
+  double _calculateTotal() {
+    return _cart.fold(0.0, (sum, item) => sum + (item.price * item.quantity));
   }
 
   Future<void> _completeSale() async {
-    if (_cartItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cart is empty. Add products to sell.')),
-      );
+    if (!mounted) return;
+    _clearUiFeedback();
+
+    if (_cart.isEmpty) {
+      _setUiFeedback("Cart is empty. Please add products.", Colors.orangeAccent);
+      return;
+    }
+
+    if (_customerFormKey.currentState?.validate() != true) {
+      _setUiFeedback("Please enter valid customer details.", Colors.orangeAccent);
       return;
     }
 
     setState(() {
-      _isLoadingSale = true;
+      _isLoading = true;
     });
 
     try {
-      FirebaseFirestore firestore = FirebaseFirestore.instance;
-      WriteBatch batch = firestore.batch();
-      Timestamp saleTimestamp = Timestamp.now();
+      bool stockSufficient = true;
+      List<String> stockIssues = [];
 
-      for (var itemInCart in _cartItems) {
-        if (itemInCart.quantityToSell <= 0) continue;
+      for (var cartItem in _cart) {
+        Product? productDetails = await _productService.getProductDetailsById(cartItem.productId);
 
-        if (itemInCart.id == null) {
-          print('Error: Product ID is null for ${itemInCart.productName}. Skipping sale entry for this item.');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Skipped ${itemInCart.productName} from sale: Missing Product ID.')),
-          );
+        if (productDetails == null) {
+          stockSufficient = false;
+          stockIssues.add("${cartItem.productName} (ID: ${cartItem.productId}) not found or error fetching details.");
           continue;
         }
 
-        // 1. Record Sale Entry
-        SaleEntry saleEntry = SaleEntry(
-          productId: itemInCart.id!,
-          productName: itemInCart.productName,
-          sku: itemInCart.sku,
-          quantitySold: itemInCart.quantityToSell,
-          pricePerUnitAtSale: itemInCart.price,
-          totalAmountForProduct: itemInCart.price * itemInCart.quantityToSell,
-          saleTimestamp: saleTimestamp,
-        );
-        DocumentReference saleDocRef = firestore.collection('sale_entries').doc();
-        batch.set(saleDocRef, saleEntry.toMap());
+        int liveStock = productDetails.currentStock;
 
-        // Stock update in master_products is REMOVED as per Option 2
+        if (cartItem.quantity > liveStock) {
+          stockSufficient = false;
+          stockIssues.add(
+              "${productDetails.productName}: Requested ${cartItem.quantity}, Available ${liveStock}");
+        }
       }
 
-      await batch.commit();
+      if (!stockSufficient) {
+        _setUiFeedback("Stock changed: ${stockIssues.join(', ')}. Please review cart.", Colors.red);
+        if (mounted) {
+          setState(() {_isLoading = false;});
+        }
+        return;
+      }
 
-      setState(() {
-        _cartItems = [];
-        _calculateGrandTotal();
-        _isLoadingSale = false;
-        // _frequentItems = List<Product>.from(_frequentItems); // No longer needed to refresh based on stock
-        // if(_searchController.text.isNotEmpty) _onSearchChanged(); // No longer needed to refresh based on stock
-      });
+      await _saleService.recordSaleAndUpdateStock(_cart);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Sale completed successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      _setUiFeedback("Sale recorded successfully!", Colors.green);
+      if (mounted) {
+        setState(() {
+          _cart.clear();
+          _customerNameController.clear();
+          _customerMobileController.clear();
+          _searchController.clear();
+          _showFrequentItems = true;
+        });
+      }
+      _loadFrequentlyPurchasedProducts();
     } catch (e) {
-      print("Error completing sale: $e");
-      if(mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error completing sale: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+      _setUiFeedback("Error recording sale: ${e.toString()}", Colors.red);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
-      setState(() {
-        _isLoadingSale = false;
-      });
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final String currentSearchText = _searchController.text;
-    final bool hasSearchText = currentSearchText.isNotEmpty;
-
-    final bool showInitialLoadingIndicator = _isLoadingFrequentItems && !hasSearchText;
-    final bool showFrequentItemsGrid = !_isLoadingFrequentItems && _frequentItems.isNotEmpty && !hasSearchText;
-
-    final bool showSearchLoadingIndicator = hasSearchText && _isSearchingProducts;
-    final bool showSearchResultsGrid = hasSearchText && !_isSearchingProducts && _searchResults.isNotEmpty;
-    final bool showNoSearchResultsMessage = hasSearchText && !_isSearchingProducts && _searchResults.isEmpty;
-
-    List<Product> productsToDisplayInGrid = [];
-    String gridTitleText = "";
-    bool shouldDisplayGrid = false;
-
-    if (showFrequentItemsGrid) {
-      productsToDisplayInGrid = _frequentItems;
-      shouldDisplayGrid = true;
-    } else if (showSearchResultsGrid) {
-      productsToDisplayInGrid = _searchResults;
-      shouldDisplayGrid = true;
-    }
-
-    bool isGridSectionVisible = shouldDisplayGrid || showSearchLoadingIndicator || showNoSearchResultsMessage;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('New Sale'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        elevation: 1.0,
-        actions: <Widget>[
-          Padding(
-            padding: const EdgeInsets.only(right: 12.0, top: 8.0, bottom: 8.0),
-            child: Center(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.shopping_cart_outlined, size: 28),
-                    tooltip: 'View Cart (${_cartItems.length})',
-                    onPressed: () {
-                      print('Cart icon tapped. Items: ${_cartItems.length}');
-                      // Potentially navigate to a cart details screen if you have one
-                    },
-                  ),
-                  if (_cartItems.isNotEmpty)
-                    Positioned(
-                      right: 4,
-                      top: 4,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 18,
-                          minHeight: 18,
-                        ),
-                        child: Text(
-                          '${_cartItems.length}',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              controller: _searchController,
-              focusNode: _searchFocusNode,
-              decoration: InputDecoration(
-                hintText: 'Search products by name, SKU, or barcode...',
-                prefixIcon: const Icon(Icons.search, color: Colors.teal),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30.0),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding:
-                const EdgeInsets.symmetric(vertical: 0, horizontal: 20),
-              ),
-            ),
-          ),
-
-          if (showInitialLoadingIndicator)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (shouldDisplayGrid)
-            Padding(
-              padding: EdgeInsets.only(left: 12.0, right: 12.0, top: 8.0, bottom: _cartItems.isNotEmpty ? 0 : 8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (gridTitleText.isNotEmpty)
-                    Text(
-                      gridTitleText,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.blueGrey[700]),
-                    ),
-                  if (gridTitleText.isNotEmpty) const SizedBox(height: 8),
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: productsToDisplayInGrid.length,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                      childAspectRatio: 1.8,
-                    ),
-                    itemBuilder: (context, index) {
-                      final product = productsToDisplayInGrid[index];
-                      bool isInCart = _cartItems.any((item) => item.id == product.id);
-                      return InkWell(
-                        onTap: () => _addToCart(product),
-                        child: Card(
-                          elevation: 2,
-                          color: isInCart ? Colors.grey[300] : null,
-                          clipBehavior: Clip.antiAlias,
-                          child: Padding(
-                            padding: const EdgeInsets.all(6.0),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.inventory_2_outlined, size: 18, color: isInCart ? Colors.grey[700] : Theme.of(context).colorScheme.secondary),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        product.productName,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                          color: isInCart ? Colors.black54 : Colors.black,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            )
-          else if (showSearchLoadingIndicator)
-              const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (showNoSearchResultsMessage)
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Center(child: Text('No products found for "$currentSearchText".', style: TextStyle(fontSize: 16, color: Colors.grey[600]))),
-                )
-              else if (!showInitialLoadingIndicator && _frequentItems.isEmpty && !hasSearchText) // Added condition for no frequent items
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Center(child: Text('No frequent items to display.', style: TextStyle(fontSize: 16, color: Colors.grey[600]))),
-                  ),
-
-          if (_cartItems.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Items (${_cartItems.length})',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: Colors.blueGrey[700]),
-                  ),
-                  Text(
-                    'Grand Total: ₹${_grandTotal.toStringAsFixed(2)}',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: Colors.green[700]),
-                  ),
-                ],
-              ),
-            ),
-
-          if (isGridSectionVisible || _cartItems.isNotEmpty)
-            const Divider(
-              height: 1.0,
-              thickness: 0.5,
-              indent: 16.0,
-              endIndent: 16.0,
-              color: Colors.grey,
-            ),
-
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  _cartItems.isEmpty && !isGridSectionVisible && !showInitialLoadingIndicator
-                      ? Padding(
-                    padding: const EdgeInsets.only(top: 16.0, left: 16, right: 16),
-                    child: Center(
-                      child: (_frequentItems.isEmpty && !hasSearchText)
-                          ? Text( // Message if no frequent items and no search
-                        'No products available to display. Try searching or ensure frequent items are loaded.',
-                        style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                        textAlign: TextAlign.center,
-                      )
-                          : Text( // Original message if frequent items section was attempted or there's search
-                        'Search or add from frequent items to build a cart.',
-                        style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  )
-                      : ListView.builder(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _cartItems.length,
-                    itemBuilder: (context, index) {
-                      final itemInCart = _cartItems[index];
-                      final itemKey = itemInCart.id ?? DateTime.now().millisecondsSinceEpoch.toString();
-                      final TextEditingController qtyController = TextEditingController(text: itemInCart.quantityToSell.toString());
-                      qtyController.selection = TextSelection.fromPosition(TextPosition(offset: qtyController.text.length));
-
-                      return Dismissible(
-                        key: Key(itemKey),
-                        onDismissed: (direction) {
-                          _removeFromCart(itemInCart);
-                        },
-                        background: Container(
-                          color: Colors.red[400],
-                          padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                          alignment: Alignment.centerRight,
-                          child: const Icon(Icons.delete_sweep_outlined, color: Colors.white),
-                        ),
-                        child: Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                          elevation: 2.0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
-                          child: ListTile(
-                            title: Text(itemInCart.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('SKU: ${itemInCart.sku ?? "N/A"} - Price: ₹${itemInCart.price.toStringAsFixed(2)}'),
-                            trailing: SizedBox(
-                              width: 160,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: <Widget>[
-                                  IconButton(
-                                    icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent),
-                                    visualDensity: VisualDensity.compact,
-                                    onPressed: () => _updateQuantityInCart(itemInCart, itemInCart.quantityToSell - 1),
-                                  ),
-                                  SizedBox(
-                                    width: 30,
-                                    child: TextField(
-                                      controller: qtyController,
-                                      keyboardType: TextInputType.number,
-                                      textAlign: TextAlign.center,
-                                      decoration: const InputDecoration(border: InputBorder.none, isDense: true),
-                                      onSubmitted: (value) {
-                                        final newQuantity = int.tryParse(value) ?? itemInCart.quantityToSell;
-                                        _updateQuantityInCart(itemInCart, newQuantity);
-                                      },
-                                      onEditingComplete: () { FocusScope.of(context).unfocus(); },
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.add_circle_outline, color: Colors.green),
-                                    visualDensity: VisualDensity.compact,
-                                    onPressed: () => _updateQuantityInCart(itemInCart, itemInCart.quantityToSell + 1),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-
-                  if (_cartItems.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 12.0),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: _isLoadingSale ? null : _completeSale,
-                              style: ButtonStyle(
-                                backgroundColor: MaterialStateProperty.all<Color>(Colors.green),
-                                padding: MaterialStateProperty.all<EdgeInsetsGeometry>(const EdgeInsets.symmetric(vertical: 16.0)),
-                                shape: MaterialStateProperty.all<RoundedRectangleBorder>(RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0))),
-                                elevation: MaterialStateProperty.all<double>(2.0),
-                              ),
-                              child: _isLoadingSale
-                                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))
-                                  : const Text('Complete Sale', style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold, color: Colors.white)),
-                            ),
-                          ),
-                          const SizedBox(height: 50.0),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
   void dispose() {
-    _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
-    _searchFocusNode.dispose();
+    _customerNameController.dispose();
+    _customerMobileController.dispose();
+    _scannerController?.dispose();
     super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: CustomAppBar(title: 'New Sale / Billing'),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Customer Details Form
+              Form(
+                key: _customerFormKey,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: CustomTextField(
+                        controller: _customerNameController,
+                        labelText: 'Customer Name',
+                        hintText: 'Optional',
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: CustomTextField(
+                        controller: _customerMobileController,
+                        labelText: 'Customer Mobile',
+                        hintText: 'Optional',
+                        keyboardType: TextInputType.phone,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return null;
+                          }
+                          return Validators.validateMobile(value);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Product Search
+              CustomTextField(
+                controller: _searchController,
+                labelText: 'Search Products (Name/SKU/Barcode)',
+                hintText: 'Type to search...',
+                prefixIcon: Icons.search,
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.qr_code_scanner),
+                  onPressed: _scanBarcode,
+                  tooltip: 'Scan Barcode',
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              _buildFeedbackWidget(),
+
+              // Product Display Area (Frequent or Search Results)
+              _isLoading && (_showFrequentItems || _searchResults.isNotEmpty)
+                  ? const Center(child: CircularProgressIndicator())
+                  : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // MODIFIED: Header for Frequently Purchased
+                  if (_showFrequentItems && _frequentlyPurchasedProducts.isNotEmpty)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8.0),
+                          child: Text(
+                            'Frequently Purchased:',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(_isFrequentProductsExpanded ? Icons.remove_circle_outline : Icons.add_circle_outline),
+                          tooltip: _isFrequentProductsExpanded ? 'Show less' : 'Show more',
+                          onPressed: _toggleFrequentProductsExpansion,
+                        ),
+                      ],
+                    ),
+                  _showFrequentItems
+                      ? _buildProductList(_frequentlyPurchasedProducts, isFrequentlyPurchased: true)
+                      : _buildProductList(_searchResults, isFrequentlyPurchased: false),
+                ],
+              ),
+
+              const Divider(thickness: 1),
+
+              // Cart Section
+              Text(
+                'Cart Items (${_cart.length})',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0, left: 4.0, right: 4.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 4,
+                      child: Text(
+                        'Product',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: Align(
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Qty',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          'Subtotal',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(color: Colors.black, height: 1, thickness: 1),
+              _cart.isEmpty
+                  ? const Center(child: Text('Cart is empty.'))
+                  : ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _cart.length,
+                separatorBuilder: (context, index) => const Divider(color: Colors.black, height: 1, thickness: 1),
+                itemBuilder: (context, index) {
+                  final item = _cart[index];
+                  return Dismissible(
+                    key: ValueKey(item.productId + item.productName + index.toString()),
+                    direction: DismissDirection.endToStart,
+                    onDismissed: (direction) {
+                      _removeCartItem(index);
+                    },
+                    background: Container(
+                      color: Colors.red,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: const Icon(
+                        Icons.delete_sweep_outlined,
+                        color: Colors.white,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            flex: 4,
+                            child: Text(
+                              item.productName,
+                              style: Theme.of(context).textTheme.bodyLarge,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  tooltip: 'Decrease quantity',
+                                  onPressed: () => _updateCartItemQuantity(index, item.quantity - 1),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                                  child: Text(
+                                    item.quantity.toString(),
+                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: Icon(Icons.add_circle_outline, color: AppColors.primaryColor, size: 20),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  tooltip: 'Increase quantity',
+                                  onPressed: () => _updateCartItemQuantity(index, item.quantity + 1),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                '₹${(item.price * item.quantity).toStringAsFixed(2)}',
+                                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Total: ₹${_calculateTotal().toStringAsFixed(2)}',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryColor,
+                    ),
+                  ),
+                  CustomButton(
+                    text: 'Complete Sale',
+                    onPressed: _isLoading ? null : _completeSale,
+                    isLoading: _isLoading,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16.0),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProductList(List<Product> products, {bool isFrequentlyPurchased = false}) {
+    if (_isLoading && products.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (products.isEmpty && !_isLoading && !_showFrequentItems && _searchController.text.isNotEmpty) {
+      return const SizedBox.shrink();
+    }
+    if (products.isEmpty && _showFrequentItems && !_isLoading) {
+      return const Center(child: Text('No frequently purchased items found.'));
+    }
+
+    // MODIFIED: Dynamic item count for frequently purchased list
+    int itemCount;
+    if (isFrequentlyPurchased) {
+      if (_isFrequentProductsExpanded) {
+        itemCount = products.length > 7 ? 7 : products.length; // Max 7 when expanded
+      } else {
+        itemCount = products.length > 3 ? 3 : products.length; // Max 3 when collapsed
+      }
+    } else {
+      itemCount = products.length;
+    }
+
+    if (itemCount == 0 && isFrequentlyPurchased) { // If no frequent items to show based on count, show message or shrink
+      return _frequentlyPurchasedProducts.isEmpty ? const Center(child: Text('No frequently purchased items found.')) : const SizedBox.shrink();
+    }
+
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: itemCount, // MODIFIED
+      itemBuilder: (context, index) {
+        final product = products[index];
+        bool isOutOfStock = product.currentStock <= 0;
+        return Card(
+          elevation: 2.0,
+          margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 0),
+          child: ListTile(
+            title: Text(product.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(
+                isFrequentlyPurchased
+                    ? 'Price: ₹${product.price.toStringAsFixed(2)} | Stock: ${product.currentStock}'
+                    : 'SKU: ${product.sku} | Price: ₹${product.price.toStringAsFixed(2)} | Stock: ${product.currentStock}'
+            ),
+            trailing: IconButton(
+              icon: Icon(Icons.add_shopping_cart, color: isOutOfStock ? Colors.grey : AppColors.primaryColor),
+              onPressed: isOutOfStock ? null : () => _addToCart(product),
+              tooltip: isOutOfStock ? 'Out of Stock' : 'Add to Cart',
+            ),
+            onTap: isOutOfStock ? null : () => _addToCart(product),
+          ),
+        );
+      },
+    );
   }
 }
