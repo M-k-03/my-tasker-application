@@ -18,16 +18,12 @@ class _DefineProductFormState extends State<DefineProductForm> {
   final _skuController = TextEditingController(); // SKU is also barcode
 
   String? _selectedUnit;
-  final List<String> _unitOptions = ['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'set', 'roll', 'meter', 'feet', 'units', 'packet']; // MODIFIED
+  final List<String> _unitOptions = ['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'set', 'roll', 'meter', 'feet', 'units', 'packet'];
   var uuid = const Uuid();
 
   bool _isSkuEditable = true;
   bool _isScanningBarcode = false;
-  final MobileScannerController _scannerController = MobileScannerController(
-    // Optional: Configure scanner settings here if needed
-    // detectionSpeed: DetectionSpeed.normal,
-    // facing: CameraFacing.back,
-  );
+  final MobileScannerController _scannerController = MobileScannerController();
   bool _isLoading = false;
 
   @override
@@ -87,16 +83,17 @@ class _DefineProductFormState extends State<DefineProductForm> {
       });
 
       try {
-        // Check for duplicate SKU
-        final sku = _skuController.text.trim(); // Also trim SKU just in case
-        final productName = _productNameController.text.trim(); // TRIM HERE
+        final sku = _skuController.text.trim();
+        final productName = _productNameController.text.trim();
 
-        // Validate trimmed product name is not empty if it wasn't already caught by validator
         if (productName.isEmpty) {
           Fluttertoast.showToast(msg: "Product name cannot be empty after trimming spaces.");
           setState(() { _isLoading = false; });
           return;
         }
+
+        // Generate the lowercase version of the product name
+        final String productNameLowercase = productName.toLowerCase();
 
         final querySnapshot = await FirebaseFirestore.instance
             .collection('master_products')
@@ -107,22 +104,21 @@ class _DefineProductFormState extends State<DefineProductForm> {
         if (querySnapshot.docs.isNotEmpty) {
           Fluttertoast.showToast(msg: "Error: SKU '$sku' already exists. Please use a unique SKU.", toastLength: Toast.LENGTH_LONG);
           setState(() { _isLoading = false; });
-          return; // Stop submission if duplicate
+          return;
         }
 
-        // No duplicate, proceed to add
         await FirebaseFirestore.instance.collection('master_products').add({
-          'productName': productName, // Use trimmed productName
+          'productName': productName,
+          'productName_lowercase': productNameLowercase, // Add the lowercase field
           'units': _selectedUnit,
           'price': double.tryParse(_priceController.text) ?? 0.0,
-          'sku': sku, // Use trimmed sku
-          'barcode': sku, // Explicitly store barcode if needed for other queries
-          'isManuallyAddedSku': !_isSkuEditable, // A way to track if SKU was from scan/manual
+          'sku': sku,
+          'barcode': sku, 
+          'isManuallyAddedSku': !_isSkuEditable,
           'createdAt': FieldValue.serverTimestamp(),
         });
 
         Fluttertoast.showToast(msg: "Product added successfully!");
-        // Reset form
         _formKey.currentState!.reset();
         _productNameController.clear();
         _priceController.clear();
@@ -154,7 +150,7 @@ class _DefineProductFormState extends State<DefineProductForm> {
               decoration: const InputDecoration(labelText: 'Product Name', border: OutlineInputBorder()),
               validator: (value) {
                 if (value == null || value.isEmpty) return 'Please enter a product name';
-                if (value.trim().isEmpty) return 'Product name cannot be only spaces'; // Added validator for spaces
+                if (value.trim().isEmpty) return 'Product name cannot be only spaces';
                 return null;
               },
             ),
@@ -184,7 +180,6 @@ class _DefineProductFormState extends State<DefineProductForm> {
               controller: _skuController,
               decoration: const InputDecoration(labelText: 'SKU / Barcode', border: OutlineInputBorder()),
               readOnly: !_isSkuEditable,
-              // It's also good practice to trim SKU if manually entered, handled in _submitForm
             ),
             const SizedBox(height: 12),
             Row(
@@ -226,27 +221,21 @@ class _DefineProductFormState extends State<DefineProductForm> {
   }
 
   Widget _buildBarcodeScannerView() {
-    // This view will be centered by the modification in the main build method
     return Column(
-      mainAxisAlignment: MainAxisAlignment.center, // Center Column content vertically
+      mainAxisAlignment: MainAxisAlignment.center,
       children: <Widget>[
         const Padding(
           padding: EdgeInsets.all(8.0),
           child: Text("Scan Barcode", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         ),
         SizedBox(
-          // Constrain the size of the scanner view
-          width: MediaQuery.of(context).size.width * 0.8, // 80% of screen width
-          height: MediaQuery.of(context).size.height * 0.4, // 40% of screen height
-          child: ClipRRect( // Apply rounded corners to the scanner preview
+          width: MediaQuery.of(context).size.width * 0.8,
+          height: MediaQuery.of(context).size.height * 0.4,
+          child: ClipRRect(
             borderRadius: BorderRadius.circular(12.0),
             child: MobileScanner(
               controller: _scannerController,
               onDetect: _handleBarcodeDetected,
-              // You might want to add error builder:
-              // errorBuilder: (context, error, child) {
-              //   return Center(child: Text('Error starting camera: ${error.toString()}'));
-              // },
             ),
           ),
         ),
@@ -262,9 +251,8 @@ class _DefineProductFormState extends State<DefineProductForm> {
   @override
   Widget build(BuildContext context) {
     if (_isScanningBarcode) {
-      // MODIFICATION: Wrap the scanner view in a Center widget
       return Center(
-        child: Padding( // Add padding around the scanner view for better aesthetics
+        child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: _buildBarcodeScannerView(),
         ),

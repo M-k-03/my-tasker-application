@@ -56,6 +56,7 @@ class _BulkUploadFormState extends State<BulkUploadForm> {
       return;
     }
 
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
     });
@@ -70,14 +71,18 @@ class _BulkUploadFormState extends State<BulkUploadForm> {
           fileBytes = await File(_selectedFile!.path!).readAsBytes();
         } catch (e) {
           Fluttertoast.showToast(msg: "Error reading file from path: $e", toastLength: Toast.LENGTH_LONG);
-          setState(() { _isLoading = false; });
+          if (mounted) {
+            setState(() { _isLoading = false; });
+          }
           return;
         }
       }
 
       if (fileBytes == null) {
         Fluttertoast.showToast(msg: "File content (bytes) is not available. Cannot process.", toastLength: Toast.LENGTH_LONG);
-        setState(() { _isLoading = false; });
+        if (mounted) {
+          setState(() { _isLoading = false; });
+        }
         return;
       }
 
@@ -85,9 +90,11 @@ class _BulkUploadFormState extends State<BulkUploadForm> {
 
       final List<String> lines = fileContent.split('\n').where((line) => line.trim().isNotEmpty).toList();
 
-      if (lines.length < 2) {
+      if (lines.length < 2) { // Needs at least one header and one data row
         Fluttertoast.showToast(msg: "CSV file is empty or has no data rows.");
-        setState(() { _isLoading = false; });
+        if (mounted) {
+          setState(() { _isLoading = false; });
+        }
         return;
       }
 
@@ -99,7 +106,9 @@ class _BulkUploadFormState extends State<BulkUploadForm> {
 
       if ([nameIndex, unitsIndex, priceIndex, skuIndex].any((index) => index == -1)) {
           Fluttertoast.showToast(msg: "CSV header is missing required columns: Product Name, Units, Price, SKU", toastLength: Toast.LENGTH_LONG);
-          setState(() { _isLoading = false; });
+          if (mounted) {
+            setState(() { _isLoading = false; });
+          }
           return;
       }
 
@@ -107,6 +116,7 @@ class _BulkUploadFormState extends State<BulkUploadForm> {
       CollectionReference masterProducts = FirebaseFirestore.instance.collection('master_products');
       int productsProcessed = 0;
       List<String> errors = [];
+      Set<String> skusInThisBatch = {}; // To check for duplicates within the CSV itself
 
       for (int i = 1; i < lines.length; i++) {
         final values = lines[i].split(',').map((v) => v.trim()).toList();
@@ -117,31 +127,73 @@ class _BulkUploadFormState extends State<BulkUploadForm> {
             double price = double.parse(values[priceIndex]);
             String sku = values[skuIndex];
 
-            if (productName.isEmpty || units.isEmpty || sku.isEmpty) {
-              errors.add("Row ${i+1}: Skipped due to missing data.");
+            if (productName.isEmpty) {
+              errors.add("Row ${i+1}: Skipped due to missing Product Name.");
               continue;
             }
+             if (units.isEmpty) {
+              errors.add("Row ${i+1}: Skipped due to missing Units for '$productName'.");
+              continue;
+            }
+             if (sku.isEmpty) {
+              errors.add("Row ${i+1}: Skipped due to missing SKU for '$productName'.");
+              continue;
+            }
+            if (values[priceIndex].isEmpty) {
+                errors.add("Row ${i+1}: Skipped due to missing Price for '$productName'.");
+                continue;
+            }
+
+
             if (!['KGS', 'Litre', 'ML', 'Pcs'].contains(units)) {
-              errors.add("Row ${i+1}: Invalid unit '$units'. Must be KGS, Litre, ML, or Pcs.");
+              errors.add("Row ${i+1} ('$productName'): Invalid unit '$units'. Must be KGS, Litre, ML, or Pcs.");
               continue;
             }
 
-            DocumentReference productDoc = masterProducts.doc();
+            final String productNameLowercase = productName.toLowerCase();
+
+            // Check for duplicate SKU within this CSV batch
+            if (skusInThisBatch.contains(sku)) {
+              errors.add("Row ${i+1} ('$productName'): Skipped. SKU '$sku' is duplicated within this CSV file.");
+              continue;
+            }
+
+            // Check for duplicate SKU in Firestore
+            QuerySnapshot existingSkuSnapshot = await masterProducts.where('sku', isEqualTo: sku).limit(1).get();
+            if (existingSkuSnapshot.docs.isNotEmpty) {
+                errors.add("Row ${i+1} ('$productName'): Skipped. SKU '$sku' already exists in the database for product '${existingSkuSnapshot.docs.first['productName']}'.");
+                continue;
+            }
+            // Optional: Check for duplicate product name (case-insensitive) in Firestore
+            // QuerySnapshot existingNameSnapshot = await masterProducts.where('productName_lowercase', isEqualTo: productNameLowercase).limit(1).get();
+            // if (existingNameSnapshot.docs.isNotEmpty) {
+            //     errors.add("Row ${i+1} ('$productName'): Skipped. Product name '$productName' already exists in the database for SKU '${existingNameSnapshot.docs.first['sku']}'.");
+            //     continue;
+            // }
+
+            DocumentReference productDoc = masterProducts.doc(); // Let Firestore generate ID
             batch.set(productDoc, {
               'productName': productName,
+              'productName_lowercase': productNameLowercase, // Added lowercase field
               'units': units,
               'price': price,
               'sku': sku,
-              'barcode': sku,
-              'isManuallyAddedSku': false,
+              'barcode': sku, // Assuming SKU is also the barcode for bulk uploads
+              'isManuallyAddedSku': false, // Default for bulk upload
               'createdAt': FieldValue.serverTimestamp(),
             });
+            skusInThisBatch.add(sku); // Add to set for checking duplicates within this file
             productsProcessed++;
           } catch (e) {
-            errors.add("Row ${i + 1}: Error processing - ${e.toString()}");
+            // Catch parsing errors for price specifically.
+            if (e is FormatException && e.source == values[priceIndex]) {
+                 errors.add("Row ${i + 1} ('${values[nameIndex]}'): Invalid price format '${values[priceIndex]}'.");
+            } else {
+                errors.add("Row ${i + 1}: Error processing - ${e.toString()}");
+            }
           }
         } else {
-            errors.add("Row ${i+1}: Skipped due to incorrect number of columns.");
+            errors.add("Row ${i+1}: Skipped due to incorrect number of columns (expected ${header.length}, got ${values.length}). Line: '${lines[i]}'");
         }
       }
 
@@ -149,15 +201,15 @@ class _BulkUploadFormState extends State<BulkUploadForm> {
         await batch.commit();
         String successMessage = "$productsProcessed products uploaded successfully!";
         if (errors.isNotEmpty) {
-          successMessage += "\nEncountered ${errors.length} issues:\n${errors.take(5).join('\n')}";
-           if(errors.length > 5) successMessage += "\n...and more.";
+          successMessage += "\nEncountered ${errors.length} issues (see details below - showing first 5):\n${errors.take(5).join('\n')}";
+           if(errors.length > 5) successMessage += "\n...and ${errors.length - 5} more issues.";
         }
         Fluttertoast.showToast(msg: successMessage, toastLength: Toast.LENGTH_LONG, gravity: ToastGravity.CENTER);
       } else {
         String errorMessage = "No valid products found to upload.";
         if (errors.isNotEmpty) {
-           errorMessage += "\nEncountered ${errors.length} issues:\n${errors.take(5).join('\n')}";
-            if(errors.length > 5) errorMessage += "\n...and more.";
+           errorMessage += "\nEncountered ${errors.length} issues (see details below - showing first 5):\n${errors.take(5).join('\n')}";
+            if(errors.length > 5) errorMessage += "\n...and ${errors.length - 5} more issues.";
         }
         Fluttertoast.showToast(msg: errorMessage, toastLength: Toast.LENGTH_LONG, gravity: ToastGravity.CENTER);
       }
