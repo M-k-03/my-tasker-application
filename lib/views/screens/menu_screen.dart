@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_exit_app/flutter_exit_app.dart'; // Added for exit functionality
+import 'package:firebase_auth/firebase_auth.dart'; // Added for Firebase Auth
+import 'package:my_tasker/views/screens/login_screen.dart'; // Added for navigation to Login
+import 'package:flutter_exit_app/flutter_exit_app.dart';
 import 'package:my_tasker/views/screens/analytics_screen.dart';
 import 'package:my_tasker/views/screens/stock_management_screen.dart';
 import 'package:my_tasker/views/screens/settings_screen.dart';
-import 'package:my_tasker/views/screens/product_catalog_management_screen.dart'; // IMPORT ADDED
-import 'package:my_tasker/views/screens/sale_entry_screen.dart'; // Added for Sale Entry
+import 'package:my_tasker/views/screens/product_catalog_management_screen.dart';
+import 'package:my_tasker/views/screens/sale_entry_screen.dart';
 
 class MenuScreen extends StatelessWidget {
   const MenuScreen({super.key});
 
-  // Helper class to structure menu item data
   static final List<_MenuItem> _menuItems = [
     _MenuItem(
       title: 'Product Catalog',
@@ -27,9 +28,9 @@ class MenuScreen extends StatelessWidget {
       targetScreen: const StockManagementScreen(),
     ),
     _MenuItem(
-      title: 'Sale Entry', // New Menu Item
-      imagePath: 'assets/images/sale-entry.png', // New Image
-      targetScreen: const SaleEntryScreen(), // New Screen
+      title: 'Sale Entry',
+      imagePath: 'assets/images/sale-entry.png',
+      targetScreen: const SaleEntryScreen(),
     ),
     _MenuItem(
       title: 'Settings',
@@ -40,12 +41,25 @@ class MenuScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final currentUserEmail = FirebaseAuth.instance.currentUser?.email ?? 'No email';
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Main Menu'),
         centerTitle: true,
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        automaticallyImplyLeading: false,
+        // automaticallyImplyLeading is false, so we manually add a leading button for the drawer
+        leading: Builder(
+          builder: (BuildContext context) {
+            return IconButton(
+              icon: const Icon(Icons.menu),
+              tooltip: 'Open menu',
+              onPressed: () {
+                Scaffold.of(context).openDrawer();
+              },
+            );
+          },
+        ),
         actions: <Widget>[
           IconButton(
             icon: const Icon(Icons.exit_to_app),
@@ -55,6 +69,34 @@ class MenuScreen extends StatelessWidget {
             },
           ),
         ],
+      ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: <Widget>[
+            UserAccountsDrawerHeader(
+              accountName: null, // You can add user's name here if available
+              accountEmail: Text(currentUserEmail),
+              currentAccountPicture: const CircleAvatar(
+                child: Icon(Icons.person, size: 50),
+              ),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.inversePrimary,
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Logout'),
+              onTap: () async {
+                await FirebaseAuth.instance.signOut();
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (Route<dynamic> route) => false, // Remove all previous routes
+                );
+              },
+            ),
+          ],
+        ),
       ),
       body: Container(
         decoration: const BoxDecoration(
