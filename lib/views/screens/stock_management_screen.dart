@@ -5,7 +5,9 @@ import 'package:my_tasker/views/screens/edit_delete_purchase_entry_screen.dart';
 import 'package:my_tasker/views/screens/view_stock_screen.dart'; // Import the new ViewStockScreen
 
 class StockManagementScreen extends StatelessWidget {
-  const StockManagementScreen({super.key});
+  final String shopId; // Added shopId
+
+  const StockManagementScreen({super.key, required this.shopId}); // Modified constructor
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +58,7 @@ class StockManagementScreen extends StatelessWidget {
                       // Navigate to ViewStockScreen
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const ViewStockScreen()),
+                        MaterialPageRoute(builder: (context) => ViewStockScreen(shopId: shopId)),
                       );
                     },
                   ),
@@ -73,7 +75,7 @@ class StockManagementScreen extends StatelessWidget {
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const PurchaseEntryScreen()),
+                        MaterialPageRoute(builder: (context) => PurchaseEntryScreen(shopId: shopId)),
                       );
                     },
                   ),
@@ -88,7 +90,7 @@ class StockManagementScreen extends StatelessWidget {
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const PurchaseHistoryScreen()),
+                        MaterialPageRoute(builder: (context) => PurchaseHistoryScreen(shopId: shopId)),
                       );
                     },
                   ),
@@ -103,7 +105,7 @@ class StockManagementScreen extends StatelessWidget {
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const EditDeletePurchaseEntryScreen()), // Navigate to placeholder
+                        MaterialPageRoute(builder: (context) => EditDeletePurchaseEntryScreen(shopId: shopId)), // Navigate to placeholder
                       );
                     },
                   ),

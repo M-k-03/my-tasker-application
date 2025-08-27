@@ -9,6 +9,8 @@ class SaleEntry {
   final double pricePerUnitAtSale;
   final double totalAmountForProduct;
   final Timestamp saleTimestamp;
+  final String shopId; // Added
+  final String userId; // Added
 
   SaleEntry({
     this.id,
@@ -19,6 +21,8 @@ class SaleEntry {
     required this.pricePerUnitAtSale,
     required this.totalAmountForProduct,
     required this.saleTimestamp,
+    required this.shopId, // Added
+    required this.userId, // Added
   });
 
   Map<String, dynamic> toMap() {
@@ -30,6 +34,24 @@ class SaleEntry {
       'pricePerUnitAtSale': pricePerUnitAtSale,
       'totalAmountForProduct': totalAmountForProduct,
       'saleTimestamp': saleTimestamp,
+      'shopId': shopId, // Added
+      'userId': userId,   // Added
     };
   }
+
+  // Consider adding a factory constructor if you need to create SaleEntry from a map
+  // factory SaleEntry.fromMap(Map<String, dynamic> map, String documentId) {
+  //   return SaleEntry(
+  //     id: documentId,
+  //     productId: map['productId'],
+  //     productName: map['productName'],
+  //     sku: map['sku'],
+  //     quantitySold: map['quantitySold'],
+  //     pricePerUnitAtSale: map['pricePerUnitAtSale'],
+  //     totalAmountForProduct: map['totalAmountForProduct'],
+  //     saleTimestamp: map['saleTimestamp'],
+  //     shopId: map['shopId'],
+  //     userId: map['userId'],
+  //   );
+  // }
 }

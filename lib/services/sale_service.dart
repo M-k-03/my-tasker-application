@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:my_tasker/models/product.dart';
-import 'package:my_tasker/models/sale_entry.dart';
-import 'package:my_tasker/models/cart_item.dart'; // Added import for CartItem
+import 'package:my_tasker/models/sale_entry.dart'; // Ensure this model is updated for shopId and userId
+import 'package:my_tasker/models/cart_item.dart';
 
 class SaleService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -9,8 +9,8 @@ class SaleService {
   // Constructor
   SaleService();
 
-  // Updated to use SaleEntry and List<CartItem>
-  Future<void> recordSaleAndUpdateStock(List<CartItem> cartItems) async { // Changed signature
+  // Updated to use SaleEntry and List<CartItem>, and to accept shopId and userId
+  Future<void> recordSaleAndUpdateStock(List<CartItem> cartItems, String shopId, String userId) async { // Changed signature
     WriteBatch batch = _firestore.batch();
     Timestamp saleTimestamp = Timestamp.now(); // Use the same timestamp for all entries in this sale
 
@@ -28,31 +28,35 @@ class SaleService {
         pricePerUnitAtSale: item.price, // Assuming CartItem has price
         totalAmountForProduct: item.price * item.quantity,
         saleTimestamp: saleTimestamp, // Consistent timestamp
+        shopId: shopId,             // Added
+        userId: userId,             // Added
       );
 
-      DocumentReference saleDocRef = _firestore.collection('sale_entries').doc(); // Corrected collection name
-      batch.set(saleDocRef, entry.toMap());
+      DocumentReference saleDocRef = _firestore.collection('sale_entries').doc();
+      batch.set(saleDocRef, entry.toMap()); // Assumes SaleEntry.toMap() includes shopId and userId
 
       // 2. Update the stock of the corresponding product in 'master_products'.
       DocumentReference productDocRef = _firestore.collection('master_products').doc(item.productId);
+      // Note: The 'master_products' collection itself should be shop-specific
+      // if product IDs are not globally unique. This update assumes item.productId
+      // is already confirmed to belong to the shopId.
+      // The ProductService used by SaleEntryScreen should handle ensuring this product belongs to the shop.
       batch.update(productDocRef, {'currentStock': FieldValue.increment(-item.quantity)});
-      print('DEBUG SaleService: Adding SaleEntry for ${item.productName} (Qty: ${item.quantity}) to batch.');
+      print('DEBUG SaleService: Adding SaleEntry for ${item.productName} (Qty: ${item.quantity}) to batch for shop $shopId, user $userId.');
       print('DEBUG SaleService: Scheduling stock update for ${item.productName} by -${item.quantity} in batch.');
     }
 
     // 3. Commit the batch
     try {
       await batch.commit();
-      print('Sale recorded and stock updated successfully for all items.');
+      print('Sale recorded and stock updated successfully for all items for shop $shopId.');
     } catch (e) {
-      print('Error during batch commit: ${e.toString()}');
-      throw Exception('Failed to record sale or update stock: ${e.toString()}');
+      print('Error during batch commit for shop $shopId: ${e.toString()}');
+      throw Exception('Failed to record sale or update stock for shop $shopId: ${e.toString()}');
     }
   }
 
-
-
-// You might add other methods here, e.g.,
-  // Future<List<SaleEntry>> fetchSalesHistory() async { ... }
-  // Future<SaleEntry?> getSaleEntryDetails(String saleEntryId) async { ... }
+  // You might add other methods here, e.g.,
+  // Future<List<SaleEntry>> fetchSalesHistory({required String shopId}) async { ... }
+  // Future<SaleEntry?> getSaleEntryDetails(String saleEntryId, {required String shopId}) async { ... }
 }

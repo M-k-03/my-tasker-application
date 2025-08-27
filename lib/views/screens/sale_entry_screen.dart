@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart'; // Added
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -15,7 +16,8 @@ import 'package:my_tasker/views/widgets/custom_button.dart';
 import 'package:my_tasker/views/widgets/custom_text_field.dart';
 
 class SaleEntryScreen extends StatefulWidget {
-  const SaleEntryScreen({super.key});
+  final String shopId; // Added
+  const SaleEntryScreen({super.key, required this.shopId}); // Modified
 
   @override
   State<SaleEntryScreen> createState() => _SaleEntryScreenState();
@@ -46,8 +48,8 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
   void initState() {
     super.initState();
     _scannerController = MobileScannerController(
-      // autoStart: false, // Default is true, MobileScanner widget will handle starting
-    );
+        // autoStart: false, // Default is true, MobileScanner widget will handle starting
+        );
     _loadFrequentlyPurchasedProducts();
     _searchController.addListener(() {
       if (_searchController.text.isEmpty) {
@@ -91,7 +93,8 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
       padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
       child: Text(
         _uiFeedbackMessage,
-        style: TextStyle(color: _uiFeedbackMessageColor, fontStyle: FontStyle.italic),
+        style: TextStyle(
+            color: _uiFeedbackMessageColor, fontStyle: FontStyle.italic),
         textAlign: TextAlign.center,
       ),
     );
@@ -103,7 +106,9 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
       _isLoading = true;
     });
     try {
-      _frequentlyPurchasedProducts = await _productService.getFrequentlyPurchasedProducts(limit: 10); // Still fetch 10, display 3 or 7
+      _frequentlyPurchasedProducts =
+          await _productService.getFrequentlyPurchasedProducts(
+              shopId: widget.shopId, limit: 10); // Modified
       print('Fetched frequently purchased: $_frequentlyPurchasedProducts');
       if (mounted) {
         for (var p in _frequentlyPurchasedProducts) {
@@ -113,7 +118,8 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
       _clearUiFeedback();
     } catch (e) {
       print('Error loading frequent items: $e');
-      _setUiFeedback("Error loading frequent items: ${e.toString()}", Colors.red);
+      _setUiFeedback(
+          "Error loading frequent items: ${e.toString()}", Colors.red);
     } finally {
       if (mounted) {
         setState(() {
@@ -139,7 +145,8 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
     });
     try {
       final String queryLowercase = query.toLowerCase();
-      _searchResults = await _productService.searchProducts(queryLowercase);
+      _searchResults = await _productService.searchProducts(queryLowercase,
+          shopId: widget.shopId); // Modified
       if (_searchResults.isEmpty && query.isNotEmpty) {
         _setUiFeedback("No products found for '$query'.", AppColors.textColor);
       }
@@ -159,7 +166,9 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
     _clearUiFeedback();
     try {
       if (_scannerController == null) {
-        _setUiFeedback("Scanner controller not initialized. Please try again or restart the screen.", Colors.red);
+        _setUiFeedback(
+            "Scanner controller not initialized. Please try again or restart the screen.",
+            Colors.red);
         return;
       }
 
@@ -184,7 +193,9 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
                   }
                 },
                 errorBuilder: (context, error) {
-                  return Center(child: Text('Error starting camera: ${error.toString()}'));
+                  return Center(
+                      child:
+                          Text('Error starting camera: ${error.toString()}'));
                 },
               ),
             ),
@@ -192,7 +203,7 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
               TextButton(
                 child: const Text('Cancel'),
                 onPressed: () {
-                  if(mounted) {
+                  if (mounted) {
                     _scannerController?.stop();
                     Navigator.of(context).pop();
                   }
@@ -202,7 +213,7 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
           );
         },
       ).then((_) {
-        if (_scannerController !=null && _scannerController!.value.isRunning){
+        if (_scannerController != null && _scannerController!.value.isRunning) {
           _scannerController!.stop();
         }
       });
@@ -217,21 +228,26 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
       _isLoading = true;
     });
     try {
-      List<Product> productsFound = await _productService.searchProducts(barcodeValue);
+      List<Product> productsFound = await _productService
+          .searchProducts(barcodeValue, shopId: widget.shopId); // Modified
 
       if (productsFound.isEmpty) {
-        _setUiFeedback("Product with barcode '$barcodeValue' not found.", Colors.orangeAccent);
+        _setUiFeedback(
+            "Product with barcode '$barcodeValue' not found.", Colors.orangeAccent);
       } else if (productsFound.length == 1) {
         final product = productsFound.first;
         if (product.currentStock <= 0) {
-          _setUiFeedback("${product.productName} is out of stock.", Colors.orangeAccent);
+          _setUiFeedback(
+              "${product.productName} is out of stock.", Colors.orangeAccent);
         } else {
           _addToCart(product);
           _setUiFeedback("${product.productName} added to cart.", Colors.green);
           _searchController.clear();
         }
       } else {
-        _setUiFeedback("Multiple products found for this barcode. Please search manually.", Colors.orangeAccent);
+        _setUiFeedback(
+            "Multiple products found for this barcode. Please search manually.",
+            Colors.orangeAccent);
       }
     } catch (e) {
       _setUiFeedback("Error processing barcode: ${e.toString()}", Colors.red);
@@ -244,9 +260,9 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
     }
   }
 
-
   void _addToCart(Product product) {
-    print('Attempting to add to cart: ${product.productName}, Stock: ${product.currentStock}');
+    print(
+        'Attempting to add to cart: ${product.productName}, Stock: ${product.currentStock}');
     if (!mounted) {
       print('_addToCart: not mounted');
       return;
@@ -254,11 +270,13 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
     _clearUiFeedback();
     if (product.currentStock <= 0) {
       print('${product.productName} is out of stock.');
-      _setUiFeedback("${product.productName} is out of stock.", Colors.orangeAccent);
+      _setUiFeedback(
+          "${product.productName} is out of stock.", Colors.orangeAccent);
       return;
     }
 
-    final int existingItemIndex = _cart.indexWhere((item) => item.productId == product.id);
+    final int existingItemIndex =
+        _cart.indexWhere((item) => item.productId == product.id);
     print('Existing item index: $existingItemIndex');
 
     print('Calling setState in _addToCart for ${product.productName}');
@@ -266,9 +284,11 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
       if (existingItemIndex != -1) {
         if (_cart[existingItemIndex].quantity < product.currentStock) {
           _cart[existingItemIndex].quantity++;
-          _setUiFeedback("${product.productName} quantity updated in cart.", Colors.green);
+          _setUiFeedback(
+              "${product.productName} quantity updated in cart.", Colors.green);
         } else {
-          _setUiFeedback("Max stock reached for ${product.productName}.", Colors.orangeAccent);
+          _setUiFeedback(
+              "Max stock reached for ${product.productName}.", Colors.orangeAccent);
         }
       } else {
         _cart.add(CartItem(
@@ -289,7 +309,8 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
   void _removeCartItem(int index) {
     if (!mounted) return;
     setState(() {
-      _setUiFeedback("${_cart[index].productName} removed from cart.", AppColors.textColor);
+      _setUiFeedback(
+          "${_cart[index].productName} removed from cart.", AppColors.textColor);
       _cart.removeAt(index);
     });
   }
@@ -301,9 +322,10 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
     if (newQuantity <= 0) {
       _removeCartItem(index);
     } else if (newQuantity > item.currentStock) {
-      _setUiFeedback("Only ${item.currentStock} units of ${item.productName} available.", Colors.orangeAccent);
-    }
-    else {
+      _setUiFeedback(
+          "Only ${item.currentStock} units of ${item.productName} available.",
+          Colors.orangeAccent);
+    } else {
       setState(() {
         _cart[index].quantity = newQuantity;
         _setUiFeedback("${item.productName} quantity updated.", Colors.green);
@@ -318,6 +340,13 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
   Future<void> _completeSale() async {
     if (!mounted) return;
     _clearUiFeedback();
+
+    final String? userId = FirebaseAuth.instance.currentUser?.uid; // Added
+    if (userId == null) { // Added
+      _setUiFeedback("Error: User not logged in. Cannot complete sale.", Colors.red);
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
 
     if (_cart.isEmpty) {
       _setUiFeedback("Cart is empty. Please add products.", Colors.orangeAccent);
@@ -338,11 +367,13 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
       List<String> stockIssues = [];
 
       for (var cartItem in _cart) {
-        Product? productDetails = await _productService.getProductDetailsById(cartItem.productId);
+        Product? productDetails =
+            await _productService.getProductDetailsById(cartItem.productId, shopId: widget.shopId); // Modified
 
         if (productDetails == null) {
           stockSufficient = false;
-          stockIssues.add("${cartItem.productName} (ID: ${cartItem.productId}) not found or error fetching details.");
+          stockIssues.add(
+              "${cartItem.productName} (ID: ${cartItem.productId}) not found or error fetching details.");
           continue;
         }
 
@@ -356,14 +387,19 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
       }
 
       if (!stockSufficient) {
-        _setUiFeedback("Stock changed: ${stockIssues.join(', ')}. Please review cart.", Colors.red);
+        _setUiFeedback(
+            "Stock changed: ${stockIssues.join(', ')}. Please review cart.",
+            Colors.red);
         if (mounted) {
-          setState(() {_isLoading = false;});
+          setState(() {
+            _isLoading = false;
+          });
         }
         return;
       }
 
-      await _saleService.recordSaleAndUpdateStock(_cart);
+      await _saleService.recordSaleAndUpdateStock(
+          _cart, widget.shopId, userId); // Modified
 
       _setUiFeedback("Sale recorded successfully!", Colors.green);
       if (mounted) {
@@ -458,32 +494,40 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
               _isLoading && (_showFrequentItems || _searchResults.isNotEmpty)
                   ? const Center(child: CircularProgressIndicator())
                   : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // MODIFIED: Header for Frequently Purchased
-                  if (_showFrequentItems && _frequentlyPurchasedProducts.isNotEmpty)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8.0),
-                          child: Text(
-                            'Frequently Purchased:',
-                            style: Theme.of(context).textTheme.titleMedium,
+                        // MODIFIED: Header for Frequently Purchased
+                        if (_showFrequentItems &&
+                            _frequentlyPurchasedProducts.isNotEmpty)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8.0),
+                                child: Text(
+                                  'Frequently Purchased:',
+                                  style: Theme.of(context).textTheme.titleMedium,
+                                ),
+                              ),
+                              IconButton(
+                                icon: Icon(_isFrequentProductsExpanded
+                                    ? Icons.remove_circle_outline
+                                    : Icons.add_circle_outline),
+                                tooltip: _isFrequentProductsExpanded
+                                    ? 'Show less'
+                                    : 'Show more',
+                                onPressed: _toggleFrequentProductsExpansion,
+                              ),
+                            ],
                           ),
-                        ),
-                        IconButton(
-                          icon: Icon(_isFrequentProductsExpanded ? Icons.remove_circle_outline : Icons.add_circle_outline),
-                          tooltip: _isFrequentProductsExpanded ? 'Show less' : 'Show more',
-                          onPressed: _toggleFrequentProductsExpansion,
-                        ),
+                        _showFrequentItems
+                            ? _buildProductList(_frequentlyPurchasedProducts,
+                                isFrequentlyPurchased: true)
+                            : _buildProductList(_searchResults,
+                                isFrequentlyPurchased: false),
                       ],
                     ),
-                  _showFrequentItems
-                      ? _buildProductList(_frequentlyPurchasedProducts, isFrequentlyPurchased: true)
-                      : _buildProductList(_searchResults, isFrequentlyPurchased: false),
-                ],
-              ),
 
               const Divider(thickness: 1),
 
@@ -491,20 +535,24 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
               Text(
                 'Cart Items (${_cart.length})',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primaryColor,
-                ),
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryColor,
+                    ),
               ),
               const SizedBox(height: 8),
               Padding(
-                padding: const EdgeInsets.only(bottom: 8.0, left: 4.0, right: 4.0),
+                padding: const EdgeInsets.only(
+                    bottom: 8.0, left: 4.0, right: 4.0),
                 child: Row(
                   children: [
                     Expanded(
                       flex: 4,
                       child: Text(
                         'Product',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                     ),
                     Expanded(
@@ -513,7 +561,10 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
                         alignment: Alignment.center,
                         child: Text(
                           'Qty',
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -523,7 +574,10 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
                         alignment: Alignment.centerRight,
                         child: Text(
                           'Subtotal',
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -534,85 +588,109 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
               _cart.isEmpty
                   ? const Center(child: Text('Cart is empty.'))
                   : ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _cart.length,
-                separatorBuilder: (context, index) => const Divider(color: Colors.black, height: 1, thickness: 1),
-                itemBuilder: (context, index) {
-                  final item = _cart[index];
-                  return Dismissible(
-                    key: ValueKey(item.productId + item.productName + index.toString()),
-                    direction: DismissDirection.endToStart,
-                    onDismissed: (direction) {
-                      _removeCartItem(index);
-                    },
-                    background: Container(
-                      color: Colors.red,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      alignment: AlignmentDirectional.centerEnd,
-                      child: const Icon(
-                        Icons.delete_sweep_outlined,
-                        color: Colors.white,
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 0),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            flex: 4,
-                            child: Text(
-                              item.productName,
-                              style: Theme.of(context).textTheme.bodyLarge,
-                              overflow: TextOverflow.ellipsis,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _cart.length,
+                      separatorBuilder: (context, index) => const Divider(
+                          color: Colors.black, height: 1, thickness: 1),
+                      itemBuilder: (context, index) {
+                        final item = _cart[index];
+                        return Dismissible(
+                          key: ValueKey(item.productId +
+                              item.productName +
+                              index.toString()),
+                          direction: DismissDirection.endToStart,
+                          onDismissed: (direction) {
+                            _removeCartItem(index);
+                          },
+                          background: Container(
+                            color: Colors.red,
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 20),
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: const Icon(
+                              Icons.delete_sweep_outlined,
+                              color: Colors.white,
                             ),
                           ),
-                          Expanded(
-                            flex: 3,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 10.0, horizontal: 0),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                IconButton(
-                                  icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                  tooltip: 'Decrease quantity',
-                                  onPressed: () => _updateCartItemQuantity(index, item.quantity - 1),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                                Expanded(
+                                  flex: 4,
                                   child: Text(
-                                    item.quantity.toString(),
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                    item.productName,
+                                    style:
+                                        Theme.of(context).textTheme.bodyLarge,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                IconButton(
-                                  icon: Icon(Icons.add_circle_outline, color: AppColors.primaryColor, size: 20),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                  tooltip: 'Increase quantity',
-                                  onPressed: () => _updateCartItemQuantity(index, item.quantity + 1),
+                                Expanded(
+                                  flex: 3,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(
+                                            Icons.remove_circle_outline,
+                                            color: Colors.redAccent,
+                                            size: 20),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        tooltip: 'Decrease quantity',
+                                        onPressed: () =>
+                                            _updateCartItemQuantity(
+                                                index, item.quantity - 1),
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 4.0),
+                                        child: Text(
+                                          item.quantity.toString(),
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium
+                                              ?.copyWith(
+                                                  fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: Icon(Icons.add_circle_outline,
+                                            color: AppColors.primaryColor,
+                                            size: 20),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        tooltip: 'Increase quantity',
+                                        onPressed: () =>
+                                            _updateCartItemQuantity(
+                                                index, item.quantity + 1),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      '₹${(item.price * item.quantity).toStringAsFixed(2)}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall
+                                          ?.copyWith(
+                                              fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                          Expanded(
-                            flex: 2,
-                            child: Align(
-                              alignment: Alignment.centerRight,
-                              child: Text(
-                                '₹${(item.price * item.quantity).toStringAsFixed(2)}',
-                                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -620,9 +698,9 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
                   Text(
                     'Total: ₹${_calculateTotal().toStringAsFixed(2)}',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryColor,
-                    ),
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryColor,
+                        ),
                   ),
                   CustomButton(
                     text: 'Complete Sale',
@@ -639,11 +717,15 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
     );
   }
 
-  Widget _buildProductList(List<Product> products, {bool isFrequentlyPurchased = false}) {
+  Widget _buildProductList(List<Product> products,
+      {bool isFrequentlyPurchased = false}) {
     if (_isLoading && products.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (products.isEmpty && !_isLoading && !_showFrequentItems && _searchController.text.isNotEmpty) {
+    if (products.isEmpty &&
+        !_isLoading &&
+        !_showFrequentItems &&
+        _searchController.text.isNotEmpty) {
       return const SizedBox.shrink();
     }
     if (products.isEmpty && _showFrequentItems && !_isLoading) {
@@ -654,18 +736,24 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
     int itemCount;
     if (isFrequentlyPurchased) {
       if (_isFrequentProductsExpanded) {
-        itemCount = products.length > 7 ? 7 : products.length; // Max 7 when expanded
+        itemCount = products.length > 7
+            ? 7
+            : products.length; // Max 7 when expanded
       } else {
-        itemCount = products.length > 3 ? 3 : products.length; // Max 3 when collapsed
+        itemCount = products.length > 3
+            ? 3
+            : products.length; // Max 3 when collapsed
       }
     } else {
       itemCount = products.length;
     }
 
-    if (itemCount == 0 && isFrequentlyPurchased) { // If no frequent items to show based on count, show message or shrink
-      return _frequentlyPurchasedProducts.isEmpty ? const Center(child: Text('No frequently purchased items found.')) : const SizedBox.shrink();
+    if (itemCount == 0 && isFrequentlyPurchased) {
+      // If no frequent items to show based on count, show message or shrink
+      return _frequentlyPurchasedProducts.isEmpty
+          ? const Center(child: Text('No frequently purchased items found.'))
+          : const SizedBox.shrink();
     }
-
 
     return ListView.builder(
       shrinkWrap: true,
@@ -678,14 +766,14 @@ class _SaleEntryScreenState extends State<SaleEntryScreen> {
           elevation: 2.0,
           margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 0),
           child: ListTile(
-            title: Text(product.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text(
-                isFrequentlyPurchased
-                    ? 'Price: ₹${product.price.toStringAsFixed(2)} | Stock: ${product.currentStock}'
-                    : 'SKU: ${product.sku} | Price: ₹${product.price.toStringAsFixed(2)} | Stock: ${product.currentStock}'
-            ),
+            title: Text(product.productName,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(isFrequentlyPurchased
+                ? 'Price: ₹${product.price.toStringAsFixed(2)} | Stock: ${product.currentStock}'
+                : 'SKU: ${product.sku} | Price: ₹${product.price.toStringAsFixed(2)} | Stock: ${product.currentStock}'),
             trailing: IconButton(
-              icon: Icon(Icons.add_shopping_cart, color: isOutOfStock ? Colors.grey : AppColors.primaryColor),
+              icon: Icon(Icons.add_shopping_cart,
+                  color: isOutOfStock ? Colors.grey : AppColors.primaryColor),
               onPressed: isOutOfStock ? null : () => _addToCart(product),
               tooltip: isOutOfStock ? 'Out of Stock' : 'Add to Cart',
             ),

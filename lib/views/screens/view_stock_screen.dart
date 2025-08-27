@@ -3,7 +3,8 @@ import 'package:my_tasker/models/product.dart'; // Ensure this path is correct
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ViewStockScreen extends StatefulWidget {
-  const ViewStockScreen({super.key});
+  final String shopId; // Added shopId
+  const ViewStockScreen({super.key, required this.shopId}); // Modified constructor
 
   @override
   State<ViewStockScreen> createState() => _ViewStockScreenState();
@@ -20,26 +21,26 @@ class _ViewStockScreenState extends State<ViewStockScreen> {
   @override
   void initState() {
     super.initState();
-    print("DEBUG ViewStockScreen: initState called. Fetching initial products.");
+    print("DEBUG ViewStockScreen (${widget.shopId}): initState called. Fetching initial products.");
     _fetchProducts(); // Initial fetch
   }
 
   @override
   void dispose() {
     _searchController.dispose();
-    print("DEBUG ViewStockScreen: dispose called.");
+    print("DEBUG ViewStockScreen (${widget.shopId}): dispose called.");
     super.dispose();
   }
 
   Future<void> _fetchProducts({String searchQuery = '', bool isPaginating = false}) async {
-    print("DEBUG ViewStockScreen: _fetchProducts - Search: '$searchQuery', Paginating: $isPaginating, IsLoading: $_isLoading, CanLoadMore: $_canLoadMore");
+    print("DEBUG ViewStockScreen (${widget.shopId}): _fetchProducts - Shop: ${widget.shopId}, Search: '$searchQuery', Paginating: $isPaginating, IsLoading: $_isLoading, CanLoadMore: $_canLoadMore");
 
     if (_isLoading && isPaginating) {
-      print("DEBUG ViewStockScreen: Already loading more (paginating), returning.");
+      print("DEBUG ViewStockScreen (${widget.shopId}): Already loading more (paginating), returning.");
       return;
     }
     if (!isPaginating && _isLoading) {
-      print("DEBUG ViewStockScreen: Already loading (new search/initial), returning.");
+      print("DEBUG ViewStockScreen (${widget.shopId}): Already loading (new search/initial), returning.");
       return;
     }
 
@@ -47,7 +48,7 @@ class _ViewStockScreenState extends State<ViewStockScreen> {
     setState(() {
       _isLoading = true;
       if (!isPaginating) {
-        print("DEBUG ViewStockScreen: Resetting product list for new search/initial load.");
+        print("DEBUG ViewStockScreen (${widget.shopId}): Resetting product list for new search/initial load.");
         _products = [];
         _lastFetchedProductDocument = null;
         _canLoadMore = true; // Reset on new search
@@ -56,23 +57,26 @@ class _ViewStockScreenState extends State<ViewStockScreen> {
 
     try {
       FirebaseFirestore firestore = FirebaseFirestore.instance;
-      Query query = firestore.collection('master_products').orderBy('productName');
+      Query query = firestore
+          .collection('master_products')
+          .where('shopId', isEqualTo: widget.shopId) // Filter by shopId
+          .orderBy('productName');
 
       if (searchQuery.isNotEmpty) {
-        print("DEBUG ViewStockScreen: Applying search query: '$searchQuery'");
+        print("DEBUG ViewStockScreen (${widget.shopId}): Applying search query: '$searchQuery'");
         query = query
             .where('productName', isGreaterThanOrEqualTo: searchQuery)
-            .where('productName', isLessThanOrEqualTo: '$searchQuery\uf8ff');
+            .where('productName', isLessThanOrEqualTo: '$searchQuery\\uf8ff');
       }
 
       if (isPaginating && _lastFetchedProductDocument != null) {
-        print("DEBUG ViewStockScreen: Paginating. Starting after doc ID: ${_lastFetchedProductDocument!.id}");
+        print("DEBUG ViewStockScreen (${widget.shopId}): Paginating. Starting after doc ID: ${_lastFetchedProductDocument!.id}");
         query = query.startAfterDocument(_lastFetchedProductDocument!);
       }
       query = query.limit(_itemsPerPage);
 
       QuerySnapshot productSnapshot = await query.get();
-      print("DEBUG ViewStockScreen: Fetched ${productSnapshot.docs.length} product documents from master_products.");
+      print("DEBUG ViewStockScreen (${widget.shopId}): Fetched ${productSnapshot.docs.length} product documents from master_products for shop ${widget.shopId}.");
 
       if (!mounted) return;
 
@@ -80,12 +84,12 @@ class _ViewStockScreenState extends State<ViewStockScreen> {
         setState(() {
           if (isPaginating) {
             _canLoadMore = false;
-            print("DEBUG ViewStockScreen: No more products to paginate.");
+            print("DEBUG ViewStockScreen (${widget.shopId}): No more products to paginate for shop ${widget.shopId}.");
           }
           _isLoading = false;
         });
-        if (!isPaginating && _products.isEmpty) { // Keep existing message for no results
-          print("DEBUG ViewStockScreen: No products found for initial load/search query '$searchQuery'.");
+        if (!isPaginating && _products.isEmpty) {
+          print("DEBUG ViewStockScreen (${widget.shopId}): No products found for initial load/search query '$searchQuery' for shop ${widget.shopId}.");
         }
         return;
       }
@@ -94,55 +98,55 @@ class _ViewStockScreenState extends State<ViewStockScreen> {
         _lastFetchedProductDocument = productSnapshot.docs.last;
       }
       if (productSnapshot.docs.length < _itemsPerPage) {
-        _canLoadMore = false; // No more if fewer than requested are fetched
-        print("DEBUG ViewStockScreen: Fetched less than itemsPerPage, setting _canLoadMore to false.");
+        _canLoadMore = false;
+        print("DEBUG ViewStockScreen (${widget.shopId}): Fetched less than itemsPerPage, setting _canLoadMore to false for shop ${widget.shopId}.");
       }
-
 
       List<Product> fetchedBatchProducts = [];
       for (var productDoc in productSnapshot.docs) {
         String productId = productDoc.id;
         String productNameForDebug = (productDoc.data() as Map<String, dynamic>)['productName'] ?? 'N/A';
-        print("DEBUG ViewStockScreen ($productNameForDebug, ID: $productId): Calculating stock.");
+        print("DEBUG ViewStockScreen ($productNameForDebug, ID: $productId, Shop: ${widget.shopId}): Calculating stock.");
 
         // Calculate Total Purchased
         int totalPurchased = 0;
         QuerySnapshot purchaseEntriesSnapshot = await firestore
             .collection('purchase_entries')
             .where('productId', isEqualTo: productId)
+            .where('shopId', isEqualTo: widget.shopId) // Filter by shopId
             .get();
-        print("DEBUG ViewStockScreen ($productNameForDebug): Found ${purchaseEntriesSnapshot.docs.length} purchase entries.");
+        print("DEBUG ViewStockScreen ($productNameForDebug, Shop: ${widget.shopId}): Found ${purchaseEntriesSnapshot.docs.length} purchase entries.");
         for (var entryDoc in purchaseEntriesSnapshot.docs) {
           final data = entryDoc.data() as Map<String, dynamic>?;
           if (data != null && data.containsKey('quantity')) {
             totalPurchased += (data['quantity'] as num?)?.toInt() ?? 0;
           }
         }
-        print("DEBUG ViewStockScreen ($productNameForDebug): Total Purchased: $totalPurchased");
+        print("DEBUG ViewStockScreen ($productNameForDebug, Shop: ${widget.shopId}): Total Purchased: $totalPurchased");
 
         // Calculate Total Sold
         int totalSold = 0;
         QuerySnapshot saleEntriesSnapshot = await firestore
             .collection('sale_entries')
             .where('productId', isEqualTo: productId)
+            .where('shopId', isEqualTo: widget.shopId) // Filter by shopId
             .get();
-        print("DEBUG ViewStockScreen ($productNameForDebug): Found ${saleEntriesSnapshot.docs.length} sale entries.");
+        print("DEBUG ViewStockScreen ($productNameForDebug, Shop: ${widget.shopId}): Found ${saleEntriesSnapshot.docs.length} sale entries.");
         for (var entryDoc in saleEntriesSnapshot.docs) {
           final data = entryDoc.data() as Map<String, dynamic>?;
-          if (data != null && data.containsKey('quantitySold')) { // Ensure field name is 'quantitySold'
+          if (data != null && data.containsKey('quantitySold')) {
             totalSold += (data['quantitySold'] as num?)?.toInt() ?? 0;
           }
         }
-        print("DEBUG ViewStockScreen ($productNameForDebug): Total Sold: $totalSold");
+        print("DEBUG ViewStockScreen ($productNameForDebug, Shop: ${widget.shopId}): Total Sold: $totalSold");
 
         int actualCalculatedStock = totalPurchased - totalSold;
-
-        // ** IMPORTANT: Cap negative stock at 0 for display and Product model **
         int stockForProductModel = actualCalculatedStock < 0 ? 0 : actualCalculatedStock;
-
-        print("DEBUG ViewStockScreen ($productNameForDebug): Actual Calculated Stock: $actualCalculatedStock, Stock for Product Model: $stockForProductModel");
-
-        // Pass 'stockForProductModel' to the Product constructor
+        print("DEBUG ViewStockScreen ($productNameForDebug, Shop: ${widget.shopId}): Actual Calculated Stock: $actualCalculatedStock, Stock for Product Model: $stockForProductModel");
+        
+        // Product.fromFirestore now expects shopId and userId from the productDoc,
+        // and currentStock is calculated and passed separately.
+        // We've already ensured Product.fromFirestore can handle these fields.
         fetchedBatchProducts.add(Product.fromFirestore(productDoc, stockForProductModel));
       }
 
@@ -150,42 +154,41 @@ class _ViewStockScreenState extends State<ViewStockScreen> {
       setState(() {
         if (isPaginating) {
           _products.addAll(fetchedBatchProducts);
-          print("DEBUG ViewStockScreen: Added ${fetchedBatchProducts.length} paginated products. Total: ${_products.length}");
+          print("DEBUG ViewStockScreen (${widget.shopId}): Added ${fetchedBatchProducts.length} paginated products. Total: ${_products.length}");
         } else {
           _products = fetchedBatchProducts;
-          print("DEBUG ViewStockScreen: Set ${fetchedBatchProducts.length} products for new search/initial.");
+          print("DEBUG ViewStockScreen (${widget.shopId}): Set ${fetchedBatchProducts.length} products for new search/initial.");
         }
         _isLoading = false;
       });
 
     } catch (e, s) {
-      print("Error fetching products in ViewStockScreen: $e");
+      print("Error fetching products in ViewStockScreen (${widget.shopId}): $e");
       print("Stack trace: $s");
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        // Optionally, show a more user-friendly error in the UI
       });
     }
   }
 
   void _onSearchChanged(String query) {
-    print("DEBUG ViewStockScreen: _onSearchChanged called with query: '$query'");
+    print("DEBUG ViewStockScreen (${widget.shopId}): _onSearchChanged called with query: '$query'");
     _fetchProducts(searchQuery: query, isPaginating: false);
   }
 
   void _loadMore() {
-    print("DEBUG ViewStockScreen: _loadMore called. CanLoadMore: $_canLoadMore, IsLoading: $_isLoading");
+    print("DEBUG ViewStockScreen (${widget.shopId}): _loadMore called. CanLoadMore: $_canLoadMore, IsLoading: $_isLoading");
     if (!_isLoading && _canLoadMore) {
       _fetchProducts(searchQuery: _searchController.text, isPaginating: true);
     } else {
-      print("DEBUG ViewStockScreen: _loadMore - conditions not met.");
+      print("DEBUG ViewStockScreen (${widget.shopId}): _loadMore - conditions not met.");
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    print("DEBUG ViewStockScreen: build - Products: ${_products.length}, Loading: $_isLoading, CanLoadMore: $_canLoadMore");
+    print("DEBUG ViewStockScreen (${widget.shopId}): build - Products: ${_products.length}, Loading: $_isLoading, CanLoadMore: $_canLoadMore");
     return Scaffold(
       appBar: AppBar(
         title: const Text('Current Stock'),
@@ -195,7 +198,7 @@ class _ViewStockScreenState extends State<ViewStockScreen> {
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
             onPressed: () {
-              print("DEBUG ViewStockScreen: Refresh button pressed.");
+              print("DEBUG ViewStockScreen (${widget.shopId}): Refresh button pressed.");
               _fetchProducts(searchQuery: _searchController.text, isPaginating: false);
             },
           )
@@ -232,7 +235,7 @@ class _ViewStockScreenState extends State<ViewStockScreen> {
                 if (!_isLoading && _canLoadMore &&
                     scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent * 0.8 &&
                     scrollInfo.metrics.maxScrollExtent > 0) {
-                  print("DEBUG ViewStockScreen: Scroll threshold reached for load more.");
+                  print("DEBUG ViewStockScreen (${widget.shopId}): Scroll threshold reached for load more.");
                   _loadMore();
                   return true;
                 }
@@ -268,7 +271,6 @@ class _ViewStockScreenState extends State<ViewStockScreen> {
                   final product = _products[index];
 
                   ShapeBorder cardShape;
-                  // product.currentStock will be 0 if actualCalculatedStock was <= 0
                   if (product.currentStock == 0) {
                     cardShape = RoundedRectangleBorder(
                       side: BorderSide(color: Colors.redAccent[700] ?? Colors.redAccent, width: 1.5),
@@ -281,24 +283,24 @@ class _ViewStockScreenState extends State<ViewStockScreen> {
                   }
 
                   return Card(
-                    key: Key("product_card_${product.id ?? index}"), // Use product.id for key
+                    key: Key("product_card_${product.id ?? index}"),
                     margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                     shape: cardShape,
                     elevation: 2.0,
                     child: ListTile(
                       title: Text(product.productName),
                       subtitle: Text(
-                          'SKU: ${product.sku ?? "N/A"} - Barcode: ${product.barcode ?? "N/A"}\nUnits: ${product.units ?? "N/A"}'),
+                          'SKU: ${product.sku ?? "N/A"} - Barcode: ${product.barcode ?? "N/A"}\\nUnits: ${product.units ?? "N/A"}'),
                       trailing: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            'Qty: ${product.currentStock}', // This uses the (potentially capped) stock
+                            'Qty: ${product.currentStock}',
                             style: TextStyle(
                               color: product.currentStock == 0
-                                  ? Colors.redAccent[700] // Red text for 0 stock
-                                  : Colors.green[700],   // Green for positive stock
+                                  ? Colors.redAccent[700]
+                                  : Colors.green[700],
                               fontWeight: FontWeight.bold,
                             ),
                           ),

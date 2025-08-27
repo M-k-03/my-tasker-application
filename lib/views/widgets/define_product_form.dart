@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Added
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:uuid/uuid.dart';
 
 class DefineProductForm extends StatefulWidget {
-  const DefineProductForm({super.key});
+  final String shopId; // Added
+
+  const DefineProductForm({super.key, required this.shopId}); // Modified
 
   @override
   State<DefineProductForm> createState() => _DefineProductFormState();
@@ -78,6 +81,12 @@ class _DefineProductFormState extends State<DefineProductForm> {
         return;
       }
 
+      final String? userId = FirebaseAuth.instance.currentUser?.uid;
+      if (userId == null) {
+        Fluttertoast.showToast(msg: "Error: User not logged in. Cannot save product.", toastLength: Toast.LENGTH_LONG);
+        return;
+      }
+
       setState(() {
         _isLoading = true;
       });
@@ -92,24 +101,29 @@ class _DefineProductFormState extends State<DefineProductForm> {
           return;
         }
 
-        // Generate the lowercase version of the product name
         final String productNameLowercase = productName.toLowerCase();
 
+        // Check for existing SKU within the same shopId to prevent duplicates within a shop
+        // Note: Global SKU uniqueness check (across all shops) has been removed as per new requirements
+        // If global SKU uniqueness is still desired, it would need a more complex query or a different data structure.
         final querySnapshot = await FirebaseFirestore.instance
             .collection('master_products')
+            .where('shopId', isEqualTo: widget.shopId) // Filter by shopId
             .where('sku', isEqualTo: sku)
             .limit(1)
             .get();
 
         if (querySnapshot.docs.isNotEmpty) {
-          Fluttertoast.showToast(msg: "Error: SKU '$sku' already exists. Please use a unique SKU.", toastLength: Toast.LENGTH_LONG);
+          Fluttertoast.showToast(msg: "Error: SKU '$sku' already exists in your shop. Please use a unique SKU within your shop.", toastLength: Toast.LENGTH_LONG);
           setState(() { _isLoading = false; });
           return;
         }
 
         await FirebaseFirestore.instance.collection('master_products').add({
+          'shopId': widget.shopId, // Added
+          'userId': userId, // Added
           'productName': productName,
-          'productName_lowercase': productNameLowercase, // Add the lowercase field
+          'productName_lowercase': productNameLowercase,
           'units': _selectedUnit,
           'price': double.tryParse(_priceController.text) ?? 0.0,
           'sku': sku,

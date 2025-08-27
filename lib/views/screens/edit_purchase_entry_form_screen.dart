@@ -5,8 +5,10 @@ import 'package:my_tasker/models/purchase_entry_item.dart';
 
 class EditPurchaseEntryFormScreen extends StatefulWidget {
   final PurchaseEntryItem purchaseEntry;
+  final String shopId; // Added shopId
 
-  const EditPurchaseEntryFormScreen({super.key, required this.purchaseEntry});
+  const EditPurchaseEntryFormScreen(
+      {super.key, required this.purchaseEntry, required this.shopId}); // Modified constructor
 
   @override
   State<EditPurchaseEntryFormScreen> createState() =>
@@ -31,6 +33,9 @@ class _EditPurchaseEntryFormScreenState
   @override
   void initState() {
     super.initState();
+    // You can use widget.shopId here if needed for any initial logic
+    // print("EditPurchaseEntryFormScreen received shopId: ${widget.shopId}");
+
     _productNameController =
         TextEditingController(text: widget.purchaseEntry.productName);
     _skuController = TextEditingController(text: widget.purchaseEntry.sku);
@@ -102,8 +107,8 @@ class _EditPurchaseEntryFormScreenState
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
 
-      final String productName = _productNameController.text.trim();
-      final String sku = _skuController.text.trim();
+      final String productName = _productNameController.text.trim(); 
+      final String sku = _skuController.text.trim(); 
       final double? quantity = double.tryParse(_quantityController.text.trim());
       final double? purchasePricePerUnit = double.tryParse(_purchasePricePerUnitController.text.trim());
       final String supplierName = _supplierNameController.text.trim();
@@ -125,6 +130,9 @@ class _EditPurchaseEntryFormScreenState
       final double totalPurchasePrice = quantity * purchasePricePerUnit;
 
       try {
+        // The shopId from widget.purchaseEntry is already the correct one for this specific entry.
+        // The widget.shopId (passed to the screen) could be used for additional validation if needed,
+        // e.g., ensuring widget.purchaseEntry.shopId == widget.shopId.
         await FirebaseFirestore.instance
             .collection('purchase_entries')
             .doc(widget.purchaseEntry.id)
@@ -137,6 +145,8 @@ class _EditPurchaseEntryFormScreenState
           'totalPurchasePrice': totalPurchasePrice,
           'supplierName': supplierName.isEmpty ? null : supplierName,
           'purchaseDate': Timestamp.fromDate(_selectedDate),
+          'shopId': widget.purchaseEntry.shopId, // Preserve existing shopId from the entry itself
+          'userId': widget.purchaseEntry.userId, // Preserve existing userId from the entry itself
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -168,13 +178,12 @@ class _EditPurchaseEntryFormScreenState
 
   // ============== DELETE FUNCTIONALITY START ==============
   Future<void> _confirmAndDeletePurchaseEntry(BuildContext dialogContext) async {
-    // Use widget.purchaseEntry.productName as it's more direct
     final productName = widget.purchaseEntry.productName;
 
     return showDialog<void>(
-      context: dialogContext, // Use the passed context for the dialog
-      barrierDismissible: false, // User must tap button to dismiss
-      builder: (BuildContext context) { // This is the dialog's own context
+      context: dialogContext, 
+      barrierDismissible: false, 
+      builder: (BuildContext context) { 
         return AlertDialog(
           title: const Text('Confirm Delete'),
           content: SingleChildScrollView(
@@ -189,15 +198,15 @@ class _EditPurchaseEntryFormScreenState
             TextButton(
               child: const Text('Cancel'),
               onPressed: () {
-                Navigator.of(context).pop(); // Dismiss the dialog
+                Navigator.of(context).pop(); 
               },
             ),
             TextButton(
               style: TextButton.styleFrom(foregroundColor: Colors.red),
               child: const Text('Delete'),
               onPressed: () {
-                Navigator.of(context).pop(); // Dismiss the dialog first
-                _deletePurchaseEntry(dialogContext); // Proceed with deletion, passing the original screen context
+                Navigator.of(context).pop(); 
+                _deletePurchaseEntry(dialogContext); 
               },
             ),
           ],
@@ -208,25 +217,26 @@ class _EditPurchaseEntryFormScreenState
 
   Future<void> _deletePurchaseEntry(BuildContext screenContext) async {
     try {
+      // Similarly for delete, widget.purchaseEntry.id is specific.
+      // widget.shopId could be used for an additional check if desired:
+      // if (widget.purchaseEntry.shopId != widget.shopId) { /* handle mismatch */ }
       await FirebaseFirestore.instance
           .collection('purchase_entries')
           .doc(widget.purchaseEntry.id)
           .delete();
 
-      // Ensure that we are using a context that is still mounted for ScaffoldMessenger and Navigator
       if (!mounted) return;
 
-      ScaffoldMessenger.of(screenContext).showSnackBar( // Use screenContext
+      ScaffoldMessenger.of(screenContext).showSnackBar( 
         const SnackBar(content: Text('Purchase entry deleted successfully!')),
       );
 
-      // Ensure that we are using a context that is still mounted for Navigator
-      if (Navigator.of(screenContext).canPop()) { // Use screenContext
-        Navigator.of(screenContext).pop(); // Pop the EditPurchaseEntryFormScreen
+      if (Navigator.of(screenContext).canPop()) { 
+        Navigator.of(screenContext).pop(); 
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(screenContext).showSnackBar( // Use screenContext
+      ScaffoldMessenger.of(screenContext).showSnackBar( 
         SnackBar(content: Text('Failed to delete purchase entry: $e')),
       );
     }
@@ -239,18 +249,15 @@ class _EditPurchaseEntryFormScreenState
       appBar: AppBar(
         title: const Text('Edit Purchase Entry'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // ============== APPBAR DELETE ACTION START ==============
         actions: <Widget>[
           IconButton(
             icon: const Icon(Icons.delete),
             tooltip: 'Delete Entry',
             onPressed: () {
-              // Pass the BuildContext from the build method to the confirm dialog
               _confirmAndDeletePurchaseEntry(context);
             },
           ),
         ],
-        // ============== APPBAR DELETE ACTION END ==============
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),

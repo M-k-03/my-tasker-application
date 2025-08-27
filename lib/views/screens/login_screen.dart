@@ -71,9 +71,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 backgroundColor: Colors.green,
                 textColor: Colors.white,
               );
-              if (mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (context) => const MenuScreen()),
+              if (mounted) { // Inside the _loginUser method, within the 'if (shopId != null && shopId.isNotEmpty)' block
+                print(
+                    'LoginScreen: Navigating to MenuScreen with shopId: $shopId');
+                Navigator
+                    .of(context)
+                    .pushReplacement( // or Navigator.pushReplacement if you prefer
+                  MaterialPageRoute(
+                      builder: (context) => MenuScreen(shopId: shopId)),
                 );
               }
             }
