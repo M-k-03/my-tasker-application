@@ -1,10 +1,11 @@
+import 'package:cloud_firestore/cloud_firestore.dart'; // Added for Firestore
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:my_tasker/utils/app_colors.dart';
 import 'package:my_tasker/utils/validators.dart';
 import 'package:my_tasker/views/screens/registration_screen.dart';
-import 'package:my_tasker/views/screens/menu_screen.dart'; // MODIFIED: Navigate to actual Menu Screen
+import 'package:my_tasker/views/screens/menu_screen.dart';
 import 'package:my_tasker/views/widgets/custom_button.dart';
 import 'package:my_tasker/views/widgets/custom_text_field.dart';
 
@@ -31,20 +32,79 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      Fluttertoast.showToast(
-        msg: "Login successful!",
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,
-        backgroundColor: Colors.green,
-        textColor: Colors.white,
-      );
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const MenuScreen()), // MODIFIED: Navigate to MenuScreen
+
+      User? user = userCredential.user;
+
+      if (user != null) {
+        // Check Firestore for shopId
+        try {
+          DocumentSnapshot shopkeeperDoc = await FirebaseFirestore.instance
+              .collection('shopkeepers')
+              .doc(user.uid)
+              .get();
+
+          if (shopkeeperDoc.exists) {
+            // Safely access shopId
+            Map<String, dynamic>? data = shopkeeperDoc.data() as Map<String, dynamic>?;
+            String? shopId = data?['shopId'];
+
+            if (shopId == null || shopId.isEmpty) {
+              Fluttertoast.showToast(
+                msg: "Please wait until the central admin assigns your shop ID.",
+                toastLength: Toast.LENGTH_LONG,
+                gravity: ToastGravity.BOTTOM,
+                backgroundColor: Colors.orange,
+                textColor: Colors.white,
+              );
+              // Optional: Sign out if user shouldn't remain logged in without shopId
+              // await FirebaseAuth.instance.signOut();
+            } else {
+              // shopId is present, proceed to MenuScreen
+              Fluttertoast.showToast(
+                msg: "Login successful!",
+                toastLength: Toast.LENGTH_SHORT,
+                gravity: ToastGravity.BOTTOM,
+                backgroundColor: Colors.green,
+                textColor: Colors.white,
+              );
+              if (mounted) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (context) => const MenuScreen()),
+                );
+              }
+            }
+          } else {
+            // Shopkeeper document doesn't exist
+            Fluttertoast.showToast(
+              msg: "User profile not found. Please contact support.",
+              toastLength: Toast.LENGTH_LONG,
+              gravity: ToastGravity.BOTTOM,
+              backgroundColor: Colors.red,
+              textColor: Colors.white,
+            );
+             // Optional: Sign out user as their profile is incomplete/missing
+            // await FirebaseAuth.instance.signOut();
+          }
+        } catch (e) { // Catch Firestore errors
+          Fluttertoast.showToast(
+            msg: "Error fetching user details: ${e.toString()}",
+            toastLength: Toast.LENGTH_LONG,
+            gravity: ToastGravity.BOTTOM,
+            backgroundColor: Colors.red,
+            textColor: Colors.white,
+          );
+        }
+      } else {
+         Fluttertoast.showToast(
+          msg: "Login failed: User authentication failed.", // More specific message
+          toastLength: Toast.LENGTH_LONG,
+          gravity: ToastGravity.BOTTOM,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
         );
       }
     } on FirebaseAuthException catch (e) {
@@ -59,8 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
         message = 'No internet connection. Please try again.';
       } else if (e.code == 'too-many-requests') {
         message = 'Too many login attempts. Please try again later.';
-      }
-      else {
+      } else {
         message = 'An error occurred: ${e.message}';
       }
       Fluttertoast.showToast(
@@ -100,7 +159,6 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            //colors: [AppColors.primaryColor.withOpacity(0.8), AppColors..withOpacity(0.8)],
             colors: [AppColors.primaryColor.withOpacity(0.8), AppColors.borderColor.withOpacity(0.8)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -129,7 +187,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     labelText: 'Email',
                     hintText: 'Enter your email',
                     keyboardType: TextInputType.emailAddress,
-                   // validator: Validators.validateEmail,
+                    validator: Validators.validateEmail, // Assuming Validators.validateEmail handles empty and format
                     prefixIcon: Icons.email,
                   ),
                   const SizedBox(height: 16),
@@ -138,7 +196,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     labelText: 'Password',
                     hintText: 'Enter your password',
                     obscureText: true,
-                    //validator: Validators.validatePassword,
+                    validator: Validators.validatePassword, // Assuming Validators.validatePassword handles empty and strength
                     prefixIcon: Icons.lock,
                   ),
                   const SizedBox(height: 30),

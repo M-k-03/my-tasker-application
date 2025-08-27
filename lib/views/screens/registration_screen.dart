@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart'; // Added for Firestore
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -15,7 +16,9 @@ class RegistrationScreen extends StatefulWidget {
 }
 
 class _RegistrationScreenState extends State<RegistrationScreen> {
+  final TextEditingController _nameController = TextEditingController(); // Added
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController(); // Added
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
@@ -31,20 +34,57 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     });
 
     try {
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      Fluttertoast.showToast(
-        msg: "Registration successful! Please log in.",
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.BOTTOM,
-        backgroundColor: Colors.green,
-        textColor: Colors.white,
-      );
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const LoginScreen()),
+
+      User? user = userCredential.user;
+
+      if (user != null) {
+        // Create user document in Firestore
+        Map<String, dynamic> userData = {
+          'userId': user.uid,
+          'name': _nameController.text.trim(),
+          'email': user.email,
+          'phone': _phoneController.text.trim(),
+          'role': 'staff', // Default role
+          'shopId': null, // Default shopId
+          'createdAt': FieldValue.serverTimestamp(), // Timestamp
+        };
+
+        try {
+          await FirebaseFirestore.instance.collection('shopkeepers').doc(user.uid).set(userData);
+          Fluttertoast.showToast(
+            msg: "Registration successful! Please log in.",
+            toastLength: Toast.LENGTH_LONG,
+            gravity: ToastGravity.BOTTOM,
+            backgroundColor: Colors.green,
+            textColor: Colors.white,
+          );
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (context) => const LoginScreen()),
+            );
+          }
+        } catch (e) {
+           Fluttertoast.showToast(
+            msg: "Failed to save user details: ${e.toString()}",
+            toastLength: Toast.LENGTH_LONG,
+            gravity: ToastGravity.BOTTOM,
+            backgroundColor: Colors.red,
+            textColor: Colors.white,
+          );
+          // Optional: consider signing out the user if Firestore write fails
+          // await FirebaseAuth.instance.signOut();
+        }
+      } else {
+        Fluttertoast.showToast(
+          msg: "Registration failed: User not created.",
+          toastLength: Toast.LENGTH_LONG,
+          gravity: ToastGravity.BOTTOM,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
         );
       }
     } on FirebaseAuthException catch (e) {
@@ -55,11 +95,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         message = 'The account already exists for that email.';
       } else if (e.code == 'invalid-email') {
         message = 'The email address is not valid.';
-      }
-      else if (e.code == 'network-request-failed') {
+      } else if (e.code == 'network-request-failed') {
         message = 'No internet connection. Please try again.';
-      }
-      else {
+      } else {
         message = 'An error occurred: ${e.message}';
       }
       Fluttertoast.showToast(
@@ -88,7 +126,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   @override
   void dispose() {
+    _nameController.dispose(); // Added
     _emailController.dispose();
+    _phoneController.dispose(); // Added
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -100,7 +140,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-           // colors: [AppColors.primaryColor.withOpacity(0.8), AppColors.accentColor.withOpacity(0.8)],
             colors: [AppColors.primaryColor.withOpacity(0.8), AppColors.borderColor.withOpacity(0.8)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -123,14 +162,43 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 30), // Adjusted spacing
+                  CustomTextField( // Added Name field
+                    controller: _nameController,
+                    labelText: 'Full Name',
+                    hintText: 'Enter your full name',
+                    keyboardType: TextInputType.name,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Full Name is required';
+                      }
+                      return null;
+                    },
+                    prefixIcon: Icons.person,
+                  ),
+                  const SizedBox(height: 16),
                   CustomTextField(
                     controller: _emailController,
                     labelText: 'Email',
                     hintText: 'Enter your email',
                     keyboardType: TextInputType.emailAddress,
-                    //validator: Validators.validateEmail,
+                   // validator: Validators.validateEmail, // Assuming Validators.validateEmail handles empty and format
                     prefixIcon: Icons.email,
+                  ),
+                  const SizedBox(height: 16),
+                  CustomTextField( // Added Phone field
+                    controller: _phoneController,
+                    labelText: 'Phone Number',
+                    hintText: 'Enter your phone number',
+                    keyboardType: TextInputType.phone,
+                     validator: (value) { // Basic phone validation
+                      if (value == null || value.isEmpty) {
+                        return 'Phone Number is required';
+                      }
+                      // Add more specific phone validation if needed (e.g., length, format)
+                      return null;
+                    },
+                    prefixIcon: Icons.phone,
                   ),
                   const SizedBox(height: 16),
                   CustomTextField(
@@ -138,7 +206,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     labelText: 'Password',
                     hintText: 'Enter your password',
                     obscureText: true,
-                    //validator: Validators.validatePassword,
+                   // validator: Validators.validatePassword, // Assuming Validators.validatePassword handles empty and strength
                     prefixIcon: Icons.lock,
                   ),
                   const SizedBox(height: 16),
