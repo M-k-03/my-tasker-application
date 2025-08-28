@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Added this line
 import 'package:flutter_exit_app/flutter_exit_app.dart';
 // import 'package:my_tasker/views/widgets/bulk_upload_form.dart'; // No longer in drawer
 // import 'package:my_tasker/views/widgets/define_product_form.dart'; // No longer in drawer
@@ -40,7 +41,9 @@ class MenuScreen extends StatefulWidget {
 
 class _MenuScreenState extends State<MenuScreen> {
   String? _userEmail;
-  bool _isLoadingEmail = true; // Added for loading state
+  String? _shopkeeperName;
+  bool _isLoadingEmail = true;
+  bool _isLoadingShopkeeperName = true;
   final SharedPreferencesService _prefsService = SharedPreferencesService();
   late List<_MenuItem> _menuItemsList;
 
@@ -48,6 +51,7 @@ class _MenuScreenState extends State<MenuScreen> {
   void initState() {
     super.initState();
     _loadUserEmail();
+    _loadShopkeeperName();
 
     _menuItemsList = [
       _MenuItem(
@@ -111,6 +115,34 @@ class _MenuScreenState extends State<MenuScreen> {
     }
   }
 
+  Future<void> _loadShopkeeperName() async {
+    setState(() {
+      _isLoadingShopkeeperName = true;
+    });
+    try {
+      User? currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        DocumentSnapshot shopkeeperDoc = await FirebaseFirestore.instance
+            .collection('shopkeepers')
+            .doc(currentUser.uid)
+            .get();
+
+        if (mounted && shopkeeperDoc.exists) {
+          setState(() {
+            _shopkeeperName = shopkeeperDoc.get('name') as String?;
+            _isLoadingShopkeeperName = false;
+          });
+        } else if (mounted) {
+          setState(() {
+            _isLoadingShopkeeperName = false; // Name not found or doc doesn't exist
+          });
+        }
+      }
+    } catch (e) {
+      print("Error loading shopkeeper name: $e");
+      if (mounted) setState(() => _isLoadingShopkeeperName = false);
+    }
+  }
   Future<void> _logout(BuildContext context) async {
     try {
       await FirebaseAuth.instance.signOut();
@@ -151,7 +183,11 @@ class _MenuScreenState extends State<MenuScreen> {
           padding: EdgeInsets.zero,
           children: <Widget>[
             UserAccountsDrawerHeader(
-              accountName: const Text("User"), // Placeholder, or fetch user's name
+              accountName: Text(
+                _isLoadingShopkeeperName
+                    ? 'Loading name...'
+                    : _shopkeeperName ?? 'User Name', // Fallback if name is null
+              ),
               accountEmail: Text(
                 _isLoadingEmail 
                     ? 'Loading email...' 
