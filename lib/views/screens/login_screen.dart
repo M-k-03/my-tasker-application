@@ -53,6 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
             String? shopId = data?['shopId'];
 
             if (shopId == null || shopId.isEmpty) {
+              print("DEBUG_LOGIN: shopkeeperDoc exists, but shopId is missing or empty. UID: ${user.uid}"); // ADDED
               Fluttertoast.showToast(
                 msg: "Please wait until the central admin assigns your shop ID.",
                 toastLength: Toast.LENGTH_LONG,
@@ -63,6 +64,7 @@ class _LoginScreenState extends State<LoginScreen> {
               // Optional: Sign out if user shouldn't remain logged in without shopId
               // await FirebaseAuth.instance.signOut();
             } else {
+              print("DEBUG_LOGIN: shopkeeperDoc exists, shopId found: $shopId. UID: ${user.uid}"); // ADDED
               // shopId is present, proceed to MenuScreen
               Fluttertoast.showToast(
                 msg: "Login successful!",
@@ -72,8 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 textColor: Colors.white,
               );
               if (mounted) { // Inside the _loginUser method, within the 'if (shopId != null && shopId.isNotEmpty)' block
-                print(
-                    'LoginScreen: Navigating to MenuScreen with shopId: $shopId');
+                print("DEBUG_LOGIN: Navigating to MenuScreen with shopId: $shopId. UID: ${user.uid}"); // REFINED
                 Navigator
                     .of(context)
                     .pushReplacement( // or Navigator.pushReplacement if you prefer
@@ -83,6 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
               }
             }
           } else {
+            print("DEBUG_LOGIN: shopkeeperDoc does NOT exist. UID: ${user.uid}"); // ADDED
             // Shopkeeper document doesn't exist
             Fluttertoast.showToast(
               msg: "User profile not found. Please contact support.",

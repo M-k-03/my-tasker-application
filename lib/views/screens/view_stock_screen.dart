@@ -60,15 +60,23 @@ class _ViewStockScreenState extends State<ViewStockScreen> {
       Query query = firestore
           .collection('master_products')
           .where('shopId', isEqualTo: widget.shopId) // Filter by shopId
-          .orderBy('productName');
+          // OrderBy will be applied based on whether there's a search query or not
+          ;
 
-      if (searchQuery.isNotEmpty) {
-        print("DEBUG ViewStockScreen (${widget.shopId}): Applying search query: '$searchQuery'");
+      String trimmedSearchQuery = searchQuery.trim();
+      String lowerCaseSearchQueryForQuery = "";
+
+      if (trimmedSearchQuery.isNotEmpty) {
+        lowerCaseSearchQueryForQuery = trimmedSearchQuery.toLowerCase();
+        query = query.orderBy('productName_lowercase'); // Order by the field used in range filter
         query = query
-            .where('productName', isGreaterThanOrEqualTo: searchQuery)
-            .where('productName', isLessThanOrEqualTo: '$searchQuery\\uf8ff');
+            .where('productName_lowercase', isGreaterThanOrEqualTo: lowerCaseSearchQueryForQuery)
+            .where('productName_lowercase', isLessThanOrEqualTo: '$lowerCaseSearchQueryForQuery\\uf8ff');
+        print("DEBUG ViewStockScreen (${widget.shopId}): Applying search to 'productName_lowercase': '$lowerCaseSearchQueryForQuery' (Original input: '$searchQuery')");
+      } else {
+        query = query.orderBy('productName_lowercase'); // Default order if no search query
+        print("DEBUG ViewStockScreen (${widget.shopId}): No search query provided. Fetching all products ordered by 'productName_lowercase'.");
       }
-
       if (isPaginating && _lastFetchedProductDocument != null) {
         print("DEBUG ViewStockScreen (${widget.shopId}): Paginating. Starting after doc ID: ${_lastFetchedProductDocument!.id}");
         query = query.startAfterDocument(_lastFetchedProductDocument!);
@@ -89,7 +97,11 @@ class _ViewStockScreenState extends State<ViewStockScreen> {
           _isLoading = false;
         });
         if (!isPaginating && _products.isEmpty) {
-          print("DEBUG ViewStockScreen (${widget.shopId}): No products found for initial load/search query '$searchQuery' for shop ${widget.shopId}.");
+          if (trimmedSearchQuery.isNotEmpty) {
+            print("DEBUG ViewStockScreen (${widget.shopId}): No products found matching search criteria '$lowerCaseSearchQueryForQuery' (Original input: '$searchQuery') for shop ${widget.shopId}.");
+          } else {
+            print("DEBUG ViewStockScreen (${widget.shopId}): No products found initially for shop ${widget.shopId}.");
+          }
         }
         return;
       }
