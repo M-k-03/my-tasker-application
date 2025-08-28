@@ -4,7 +4,8 @@ import 'package:intl/intl.dart'; // For date formatting
 import 'package:my_tasker/models/purchase_entry_item.dart'; // Import the new model location
 
 class PurchaseHistoryScreen extends StatefulWidget {
-  const PurchaseHistoryScreen({super.key});
+  final String shopId; // Added shopId
+  const PurchaseHistoryScreen({super.key, required this.shopId}); // Modified constructor
 
   @override
   State<PurchaseHistoryScreen> createState() => _PurchaseHistoryScreenState();
@@ -33,8 +34,11 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
   }
 
   Stream<List<PurchaseEntryItem>> _buildStream(Map<String, dynamic> filters) {
-    Query query = FirebaseFirestore.instance.collection('purchase_entries');
-    print("Building stream with filters: $filters"); // DEBUG
+    Query query = FirebaseFirestore.instance
+        .collection('purchase_entries')
+        .where('shopId', isEqualTo: widget.shopId); // Added shopId filter
+
+    print("Building stream for shop: ${widget.shopId} with filters: $filters"); // DEBUG
 
     bool hasProductNameFilter = false; // Flag
     bool otherFiltersActive = false;

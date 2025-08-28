@@ -7,9 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
+import 'package:firebase_auth/firebase_auth.dart'; // Import FirebaseAuth
 
 class BulkUploadForm extends StatefulWidget {
-  const BulkUploadForm({super.key});
+  final String shopId;
+  const BulkUploadForm({super.key, required this.shopId});
 
   @override
   State<BulkUploadForm> createState() => _BulkUploadFormState();
@@ -53,6 +55,12 @@ class _BulkUploadFormState extends State<BulkUploadForm> {
   Future<void> _uploadFile() async {
     if (_selectedFile == null) {
       Fluttertoast.showToast(msg: "Please select a file first.");
+      return;
+    }
+
+    final String? userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      Fluttertoast.showToast(msg: "Error: User not logged in. Cannot proceed with upload.", toastLength: Toast.LENGTH_LONG);
       return;
     }
 
@@ -144,7 +152,6 @@ class _BulkUploadFormState extends State<BulkUploadForm> {
                 continue;
             }
 
-
             if (!['KGS', 'Litre', 'ML', 'Pcs'].contains(units)) {
               errors.add("Row ${i+1} ('$productName'): Invalid unit '$units'. Must be KGS, Litre, ML, or Pcs.");
               continue;
@@ -152,40 +159,37 @@ class _BulkUploadFormState extends State<BulkUploadForm> {
 
             final String productNameLowercase = productName.toLowerCase();
 
-            // Check for duplicate SKU within this CSV batch
             if (skusInThisBatch.contains(sku)) {
               errors.add("Row ${i+1} ('$productName'): Skipped. SKU '$sku' is duplicated within this CSV file.");
               continue;
             }
 
-            // Check for duplicate SKU in Firestore
-            QuerySnapshot existingSkuSnapshot = await masterProducts.where('sku', isEqualTo: sku).limit(1).get();
+            QuerySnapshot existingSkuSnapshot = await masterProducts
+                .where('sku', isEqualTo: sku)
+                .where('shopId', isEqualTo: widget.shopId) // Check SKU within the specific shop
+                .limit(1)
+                .get();
             if (existingSkuSnapshot.docs.isNotEmpty) {
-                errors.add("Row ${i+1} ('$productName'): Skipped. SKU '$sku' already exists in the database for product '${existingSkuSnapshot.docs.first['productName']}'.");
+                errors.add("Row ${i+1} ('$productName'): Skipped. SKU '$sku' already exists in your shop for product '${existingSkuSnapshot.docs.first['productName']}'.");
                 continue;
             }
-            // Optional: Check for duplicate product name (case-insensitive) in Firestore
-            // QuerySnapshot existingNameSnapshot = await masterProducts.where('productName_lowercase', isEqualTo: productNameLowercase).limit(1).get();
-            // if (existingNameSnapshot.docs.isNotEmpty) {
-            //     errors.add("Row ${i+1} ('$productName'): Skipped. Product name '$productName' already exists in the database for SKU '${existingNameSnapshot.docs.first['sku']}'.");
-            //     continue;
-            // }
 
-            DocumentReference productDoc = masterProducts.doc(); // Let Firestore generate ID
+            DocumentReference productDoc = masterProducts.doc();
             batch.set(productDoc, {
               'productName': productName,
-              'productName_lowercase': productNameLowercase, // Added lowercase field
+              'productName_lowercase': productNameLowercase,
               'units': units,
               'price': price,
               'sku': sku,
-              'barcode': sku, // Assuming SKU is also the barcode for bulk uploads
-              'isManuallyAddedSku': false, // Default for bulk upload
+              'barcode': sku,
+              'isManuallyAddedSku': false,
               'createdAt': FieldValue.serverTimestamp(),
+              'shopId': widget.shopId, // Added shopId
+              'userId': userId,        // Added userId
             });
-            skusInThisBatch.add(sku); // Add to set for checking duplicates within this file
+            skusInThisBatch.add(sku);
             productsProcessed++;
           } catch (e) {
-            // Catch parsing errors for price specifically.
             if (e is FormatException && e.source == values[priceIndex]) {
                  errors.add("Row ${i + 1} ('${values[nameIndex]}'): Invalid price format '${values[priceIndex]}'.");
             } else {

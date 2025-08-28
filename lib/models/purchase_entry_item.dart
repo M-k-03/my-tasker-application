@@ -10,7 +10,9 @@ class PurchaseEntryItem {
   final String? supplierName;
   final Timestamp purchaseDate;
   final double totalPurchasePrice;
-  final double purchasePricePerUnit; // Added field
+  final double purchasePricePerUnit;
+  final String shopId; // Added
+  final String userId; // Added
 
   PurchaseEntryItem({
     required this.id,
@@ -21,7 +23,9 @@ class PurchaseEntryItem {
     this.supplierName,
     required this.purchaseDate,
     required this.totalPurchasePrice,
-    required this.purchasePricePerUnit, // Added to constructor
+    required this.purchasePricePerUnit,
+    required this.shopId, // Added
+    required this.userId, // Added
   });
 
   factory PurchaseEntryItem.fromSnapshot(DocumentSnapshot doc) {
@@ -35,7 +39,28 @@ class PurchaseEntryItem {
       supplierName: data['supplierName'],
       purchaseDate: data['purchaseDate'] as Timestamp? ?? Timestamp.now(), // Handle potential null
       totalPurchasePrice: (data['totalPurchasePrice'] as num?)?.toDouble() ?? 0.0,
-      purchasePricePerUnit: (data['purchasePricePerUnit'] as num?)?.toDouble() ?? 0.0, // Added to factory, defaulting to 0.0
+      purchasePricePerUnit: (data['purchasePricePerUnit'] as num?)?.toDouble() ?? 0.0,
+      // For shopId and userId, default to empty string if not present in older documents.
+      // Consider a more robust handling strategy if these are critical for all items.
+      shopId: data['shopId'] as String? ?? '', 
+      userId: data['userId'] as String? ?? '',
     );
   }
+
+  // If you also convert PurchaseEntryItem objects to a Map for saving to Firestore,
+  // you would add/update a toMap() method here:
+  // Map<String, dynamic> toMap() {
+  //   return {
+  //     'productName': productName,
+  //     'sku': sku,
+  //     'quantity': quantity,
+  //     'unit': unit,
+  //     'supplierName': supplierName,
+  //     'purchaseDate': purchaseDate,
+  //     'totalPurchasePrice': totalPurchasePrice,
+  //     'purchasePricePerUnit': purchasePricePerUnit,
+  //     'shopId': shopId,
+  //     'userId': userId,
+  //   };
+  // }
 }

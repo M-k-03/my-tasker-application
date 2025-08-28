@@ -5,7 +5,8 @@ import 'package:my_tasker/models/purchase_entry_item.dart';
 import 'package:my_tasker/views/screens/edit_purchase_entry_form_screen.dart'; // Added import
 
 class EditDeletePurchaseEntryScreen extends StatefulWidget {
-  const EditDeletePurchaseEntryScreen({super.key});
+  final String shopId; // Added shopId
+  const EditDeletePurchaseEntryScreen({super.key, required this.shopId}); // Modified constructor
 
   @override
   State<EditDeletePurchaseEntryScreen> createState() =>
@@ -19,13 +20,18 @@ class _EditDeletePurchaseEntryScreenState
   @override
   void initState() {
     super.initState();
+    print("EditDeletePurchaseEntryScreen initialized for shop: ${widget.shopId}"); // Debug log
     _purchaseEntriesStream = FirebaseFirestore.instance
         .collection('purchase_entries')
+        .where('shopId', isEqualTo: widget.shopId) // Added shopId filter
         .orderBy('purchaseDate', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => PurchaseEntryItem.fromSnapshot(doc))
-            .toList());
+        .map((snapshot) {
+      print("Purchase entries snapshot received for shop ${widget.shopId}, docs: ${snapshot.docs.length}"); // Debug log
+      return snapshot.docs
+          .map((doc) => PurchaseEntryItem.fromSnapshot(doc))
+          .toList();
+    });
   }
 
   @override
@@ -39,7 +45,7 @@ class _EditDeletePurchaseEntryScreenState
         stream: _purchaseEntriesStream,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            print("Error in EditDeletePurchaseEntryScreen stream: ${snapshot.error}");
+            print("Error in EditDeletePurchaseEntryScreen stream for shop ${widget.shopId}: ${snapshot.error}"); // Debug log
             return Center(
                 child: Text('Error loading entries: ${snapshot.error}'));
           }
@@ -47,7 +53,7 @@ class _EditDeletePurchaseEntryScreenState
             return const Center(child: CircularProgressIndicator());
           }
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text('No purchase entries found.'));
+            return const Center(child: Text('No purchase entries found for this shop.'));
           }
 
           List<PurchaseEntryItem> entries = snapshot.data!;
@@ -79,7 +85,7 @@ class _EditDeletePurchaseEntryScreenState
                     ],
                   ),
                   trailing: Text(
-                    '\u20B9${entry.totalPurchasePrice.toStringAsFixed(2)}', // Rupee symbol
+                    '₹${entry.totalPurchasePrice.toStringAsFixed(2)}', // Rupee symbol
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -90,7 +96,10 @@ class _EditDeletePurchaseEntryScreenState
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => EditPurchaseEntryFormScreen(purchaseEntry: entry),
+                        builder: (context) => EditPurchaseEntryFormScreen(
+                          purchaseEntry: entry,
+                          shopId: widget.shopId, // Pass shopId
+                        ),
                       ),
                     );
                   },

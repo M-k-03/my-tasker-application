@@ -3,7 +3,8 @@ import 'package:my_tasker/views/widgets/define_product_form.dart';
 import 'package:my_tasker/views/widgets/bulk_upload_form.dart'; // Added import
 
 class ProductCatalogManagementScreen extends StatefulWidget {
-  const ProductCatalogManagementScreen({super.key});
+  final String shopId; // Added shopId
+  const ProductCatalogManagementScreen({super.key, required this.shopId}); // Modified constructor
 
   @override
   State<ProductCatalogManagementScreen> createState() =>
@@ -14,10 +15,17 @@ class _ProductCatalogManagementScreenState
     extends State<ProductCatalogManagementScreen> {
   int _currentIndex = 0;
 
-  final List<Widget> _pages = [
-    const DefineProductForm(), // Index 0
-    const BulkUploadForm(), // Index 1 - Changed to use the actual form
-  ];
+  late final List<Widget> _pages; // Changed to late final
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize _pages here where widget.shopId is accessible
+    _pages = [
+      DefineProductForm(shopId: widget.shopId), // Pass shopId
+      BulkUploadForm(shopId: widget.shopId),    // Pass shopId
+    ];
+  }
 
   void _onTabTapped(int index) {
     setState(() {
