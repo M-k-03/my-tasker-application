@@ -189,7 +189,7 @@ class _MenuScreenState extends State<MenuScreen> {
                     : _shopkeeperName ?? 'User Name', // Fallback if name is null
               ),
               accountEmail: Text(
-                _isLoadingEmail 
+                    _isLoadingEmail 
                     ? 'Loading email...' 
                     : _userEmail ?? 'No email available', // Handle null email after loading
               ),
@@ -230,9 +230,9 @@ class _MenuScreenState extends State<MenuScreen> {
         padding: const EdgeInsets.all(16.0),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2, // You can adjust this count
-          crossAxisSpacing: 16.0,
-          mainAxisSpacing: 16.0,
-          childAspectRatio: 1.0, // Adjust for desired item shape (width / height)
+          crossAxisSpacing: 8.0, // Further reduced spacing
+          mainAxisSpacing: 8.0,  // Further reduced spacing
+          childAspectRatio: 1.4, // Make tiles even wider than they are tall
         ),
         itemCount: _menuItemsList.length,
         itemBuilder: (context, index) {
@@ -257,21 +257,21 @@ class _MenuScreenState extends State<MenuScreen> {
                 children: <Widget>[
                   Image.asset(
                     menuItem.imagePath,
-                    height: 60, // Adjust size as needed
-                    width: 60,  // Adjust size as needed
+                    height: 36, // Reverted to a larger size
+                    width: 36,  // Reverted to a larger size
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
                       // Fallback to Icon if image fails to load
                       print("Error loading image ${menuItem.imagePath}: $error");
-                      return Icon(menuItem.iconData, size: 50, color: Colors.orangeAccent);
+                      return Icon(menuItem.iconData, size: 30, color: Colors.orangeAccent); // Reverted fallback icon size
                     },
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 6), // Reverted spacing
                   Text(
                     menuItem.title,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      fontSize: 16,
+                      fontSize: 12, // Reverted font size
                       fontWeight: FontWeight.bold,
                     ),
                   ),
