@@ -24,7 +24,7 @@ class _EditDeletePurchaseEntryScreenState
     _purchaseEntriesStream = FirebaseFirestore.instance
         .collection('purchase_entries')
         .where('shopId', isEqualTo: widget.shopId) // Added shopId filter
-        .orderBy('purchaseDate', descending: true)
+        .orderBy('purchaseDate', descending: true) // CHANGED: Order by purchaseDate
         .snapshots()
         .map((snapshot) {
       print("Purchase entries snapshot received for shop ${widget.shopId}, docs: ${snapshot.docs.length}"); // Debug log
@@ -64,7 +64,7 @@ class _EditDeletePurchaseEntryScreenState
             itemBuilder: (context, index) {
               PurchaseEntryItem entry = entries[index];
               String formattedDate = DateFormat('dd MMM yyyy, hh:mm a')
-                  .format(entry.purchaseDate.toDate());
+                  .format(entry.purchaseDate.toDate()); // CHANGED: Use purchaseDate for formatting
 
               return Card(
                 elevation: 3,
@@ -77,7 +77,7 @@ class _EditDeletePurchaseEntryScreenState
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Qty: ${entry.quantity} ${entry.unit}'),
+                      Text('Qty: ${entry.quantityPurchased} ${entry.unit}'), // Changed from quantity
                       if (entry.supplierName != null &&
                           entry.supplierName!.isNotEmpty)
                         Text('Supplier: ${entry.supplierName}'),

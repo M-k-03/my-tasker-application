@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart'; // Added
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:intl/intl.dart';
+import 'package:my_tasker/models/purchase_entry_item.dart'; // Import PurchaseEntryItem
+import 'package:my_tasker/services/stock_service.dart'; // Import StockService
 import 'package:my_tasker/views/screens/lookup_scanner_screen.dart'; // Make sure this path is correct
 
 // Placeholder for MasterProduct model - adjust if you have a separate model file
@@ -43,6 +45,7 @@ class PurchaseEntryScreen extends StatefulWidget {
 
 class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
   final _formKey = GlobalKey<FormState>();
+  final StockService _stockService = StockService(); // Instantiate StockService
 
   MasterProduct? _selectedProduct;
   String? _selectedProductUnit;
@@ -122,7 +125,7 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
     await showDialog(
       context: context,
       builder: (BuildContext context) {
-        return StatefulBuilder( 
+        return StatefulBuilder(
           builder: (BuildContext context, StateSetter setDialogState) {
             return AlertDialog(
               title: const Text('Search Product by SKU or Name'),
@@ -139,7 +142,7 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                         hintText: 'Enter SKU or Product Name',
                         suffixIcon: Icon(Icons.search),
                       ),
-                      onSubmitted: (value) async { 
+                      onSubmitted: (value) async {
                          if (searchQuery.trim().isEmpty) {
                             Fluttertoast.showToast(msg: "Please enter a search term");
                             return;
@@ -157,14 +160,14 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                             if (skuQuery.docs.isNotEmpty) {
                               searchResults.add(MasterProduct.fromFirestore(skuQuery.docs.first));
                             }
-                            
+
                             // Search by Name within the shop
                             final nameQuerySnapshot = await FirebaseFirestore.instance
                                 .collection('master_products')
                                 .where('productName', isGreaterThanOrEqualTo: searchQuery.trim())
                                 .where('productName', isLessThanOrEqualTo: '${searchQuery.trim()}\uf8ff')
                                 .where('shopId', isEqualTo: widget.shopId) // Added shopId filter
-                                .limit(10) 
+                                .limit(10)
                                 .get();
                             for (var doc in nameQuerySnapshot.docs) {
                               final product = MasterProduct.fromFirestore(doc);
@@ -206,7 +209,7 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                               .where('productName', isGreaterThanOrEqualTo: searchQuery.trim())
                               .where('productName', isLessThanOrEqualTo: '${searchQuery.trim()}\uf8ff')
                               .where('shopId', isEqualTo: widget.shopId) // Added shopId filter
-                              .limit(10) 
+                              .limit(10)
                               .get();
                           for (var doc in nameQuerySnapshot.docs) {
                             final product = MasterProduct.fromFirestore(doc);
@@ -237,8 +240,8 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                               title: Text(product.productName),
                               subtitle: Text('SKU: ${product.sku} - Unit: ${product.units}'),
                               onTap: () {
-                                Navigator.pop(context); 
-                                _fetchProductDetails(product.sku); 
+                                Navigator.pop(context);
+                                _fetchProductDetails(product.sku);
                               },
                             );
                           },
@@ -283,7 +286,7 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
           _selectedProductUnit = product.units;
           _quantityController.clear();
           _purchasePriceController.clear();
-          _totalPurchasePriceController.clear(); 
+          _totalPurchasePriceController.clear();
         });
         Fluttertoast.showToast(msg: "Product loaded: ${product.productName}");
       } else {
@@ -309,7 +312,7 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
   }
 
   Future<void> _submitForm() async {
-    if (_isSubmitting) return; 
+    if (_isSubmitting) return;
 
     if (!_formKey.currentState!.validate()) {
       return;
@@ -346,22 +349,51 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
         'entryTimestamp': FieldValue.serverTimestamp(),
       };
 
-      await FirebaseFirestore.instance.collection('purchase_entries').add(purchaseData);
+      // Add purchase entry to Firestore
+      DocumentReference docRef = await FirebaseFirestore.instance.collection('purchase_entries').add(purchaseData);
 
-      Fluttertoast.showToast(
-        msg: "Purchase entry saved successfully!",
-        toastLength: Toast.LENGTH_LONG,
+      // Prepare PurchaseEntryItem for stock update
+      // This now matches the actual PurchaseEntryItem model definition
+      final purchaseEntryForStock = PurchaseEntryItem(
+        id: docRef.id,
+        productId: _selectedProduct!.id,
+        shopId: purchaseData['shopId'] as String,
+        productName: _selectedProduct!.productName,
+        sku: _selectedProduct!.sku,
+        quantityPurchased: (purchaseData['quantity'] as double).toInt(), // Convert double to int
+        unit: (purchaseData['unit'] as String?) ?? 'units', // This is String? in model, so direct cast is fine
+        purchaseDate: purchaseData['purchaseDate'] as Timestamp,
+        purchasePricePerUnit: purchaseData['purchasePricePerUnit'] as double,
+        totalPurchasePrice: purchaseData['totalPurchasePrice'] as double,
+        userId: purchaseData['userId'] as String,
+        createdAt: Timestamp.now(), // Required by PurchaseEntryItem constructor
+        // Fields like invoiceNumber, purchaseDate (from purchaseData), expiryDate, notes
+        // are part of the 'purchase_entries' Firestore document but not part of PurchaseEntryItem model.
+        // PurchaseEntryItem is streamlined for what StockService needs and what's core to the item.
+        supplierName: purchaseData['supplierName'] as String?, // This is String? in model
       );
 
-      _clearSelectedProduct();
+      // Update stock summary
+      try {
+        await _stockService.updateStockOnPurchase(purchaseEntryForStock);
+        Fluttertoast.showToast(
+          msg: "Purchase entry saved and stock updated!",
+          toastLength: Toast.LENGTH_LONG,
+        );
+      } catch (stockError) {
+        Fluttertoast.showToast(
+          msg: "Purchase entry saved, but failed to update stock: ${stockError.toString()}",
+          toastLength: Toast.LENGTH_LONG,
+        );
+      }
+      // Clear form and reset state
+      _formKey.currentState?.reset(); // Resets form fields
+      _clearSelectedProduct(); // Clears product specific fields and controllers related to product
+      // Other fields not part of product or form reset
       _supplierController.clear();
       _invoiceController.clear();
       _notesController.clear();
-      setState(() {
-        _purchaseDate = DateTime.now();
-        _expiryDate = null;
-      });
-
+      setState(() { _purchaseDate = DateTime.now(); _expiryDate = null; });
     } catch (e) {
       Fluttertoast.showToast(
         msg: "Failed to save purchase entry: ${e.toString()}",
@@ -445,103 +477,92 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                 const SizedBox(height: 20),
 
                 TextFormField(
-                  controller: _quantityController,
-                  decoration: InputDecoration(labelText: 'Quantity Purchased (${_selectedProductUnit ?? 'units'})'),
+                  controller: _quantityController, // Rest of the file unchanged
+                  decoration: InputDecoration(
+                    labelText: 'Quantity Purchased *',
+                    hintText: 'Enter quantity',
+                    suffixText: _selectedProductUnit ?? 'units',
+                  ),
                   keyboardType: TextInputType.number,
-                  enabled: !_isSubmitting,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter quantity';
                     }
                     if (double.tryParse(value) == null || double.parse(value) <= 0) {
-                      return 'Please enter a valid quantity';
+                      return 'Please enter a valid quantity greater than 0';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 12),
-
                 TextFormField(
                   controller: _purchasePriceController,
-                  decoration: const InputDecoration(labelText: 'Purchase Price per Unit'),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  enabled: !_isSubmitting,
-                   validator: (value) {
-                    if (value != null && value.isNotEmpty && (double.tryParse(value) == null || double.parse(value) < 0)) {
-                       return 'Please enter a valid price or leave empty';
+                  decoration: const InputDecoration(labelText: 'Purchase Price per Unit *', hintText: 'Enter price per unit'),
+                  keyboardType: TextInputType.number,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter purchase price';
+                    }
+                    if (double.tryParse(value) == null || double.parse(value) < 0) {
+                      return 'Please enter a valid price';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 12),
-
                 TextFormField(
                   controller: _totalPurchasePriceController,
-                  decoration: const InputDecoration(labelText: 'Total Purchase Price'),
+                  decoration: const InputDecoration(labelText: 'Total Purchase Price', hintText: 'Auto-calculated'),
+                  keyboardType: TextInputType.number,
                   readOnly: true,
                 ),
-                const SizedBox(height: 12),
-
+                const SizedBox(height: 20),
+                const Text('Supplier & Invoice (Optional):', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
                 TextFormField(
                   controller: _supplierController,
-                  decoration: const InputDecoration(labelText: 'Supplier/Dealer Name'),
-                  enabled: !_isSubmitting,
+                  decoration: const InputDecoration(labelText: 'Supplier Name', hintText: 'Enter supplier name'),
                 ),
                 const SizedBox(height: 12),
-
                 TextFormField(
                   controller: _invoiceController,
-                  decoration: const InputDecoration(labelText: 'Invoice/Bill No. (Optional)'),
-                  enabled: !_isSubmitting,
+                  decoration: const InputDecoration(labelText: 'Invoice Number', hintText: 'Enter invoice number'),
                 ),
-                const SizedBox(height: 12),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text('Purchase Date: ${DateFormat('EEE, MMM d, yyyy').format(_purchaseDate)}'),
-                    ),
-                    TextButton(
-                      onPressed: _isSubmitting ? null : () => _selectDate(context, true),
-                      child: const Text('Change Date'),
-                    ),
-                  ],
+                const SizedBox(height: 20),
+                const Text('Dates:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                ListTile(
+                  title: Text('Purchase Date: ${DateFormat('yyyy-MM-dd').format(_purchaseDate)}'),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () => _selectDate(context, true),
                 ),
-                const SizedBox(height: 12),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text('Expiry Date: ${_expiryDate == null ? 'N/A' : DateFormat('EEE, MMM d, yyyy').format(_expiryDate!)}'),
-                    ),
-                    TextButton(
-                      onPressed: _isSubmitting ? null : () => _selectDate(context, false),
-                      child: const Text('Set/Change Date'),
-                    ),
-                  ],
+                ListTile(
+                  title: Text('Expiry Date: ${_expiryDate != null ? DateFormat('yyyy-MM-dd').format(_expiryDate!) : 'Not Set (Optional)'}'),
+                  trailing: const Icon(Icons.calendar_today),
+                  onTap: () => _selectDate(context, false),
+                  subtitle: _expiryDate == null ? const Text('Tap to set expiry date for perishable goods') : null,
                 ),
-                const SizedBox(height: 12),
-
+                const SizedBox(height: 20),
+                const Text('Notes (Optional):', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
                 TextFormField(
                   controller: _notesController,
-                  decoration: const InputDecoration(labelText: 'Notes/Remarks (Optional)'),
+                  decoration: const InputDecoration(labelText: 'Notes', hintText: 'Any additional notes for this purchase'),
                   maxLines: 3,
-                  enabled: !_isSubmitting,
                 ),
-                const SizedBox(height: 24),
-
+                const SizedBox(height: 30),
                 Center(
-                  child: ElevatedButton(
-                    onPressed: _isSubmitting ? null : _submitForm,
+                  child: ElevatedButton.icon(
+                    icon: _isSubmitting ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.0)) : const Icon(Icons.save),
+                    label: Text(_isSubmitting ? 'Saving...' : 'Save Purchase Entry'),
+                    onPressed: _isSubmitting ? null : _submitForm, // Disable button when submitting
                     style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                        backgroundColor: _isSubmitting ? Colors.grey : null,
+                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                      textStyle: const TextStyle(fontSize: 16),
                     ),
-                    child: _isSubmitting 
-                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white))) 
-                        : const Text('Submit Purchase Entry'),
                   ),
                 ),
+                const SizedBox(height: 20),
               ],
             ),
           ),

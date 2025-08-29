@@ -39,21 +39,21 @@ class _EditPurchaseEntryFormScreenState
     _productNameController =
         TextEditingController(text: widget.purchaseEntry.productName);
     _skuController = TextEditingController(text: widget.purchaseEntry.sku);
-    _quantityController =
-        TextEditingController(text: widget.purchaseEntry.quantity.toString());
+    // Initialize with quantityPurchased, which is an int
+    _quantityController = TextEditingController(
+        text: widget.purchaseEntry.quantityPurchased.toString());
     _totalPurchasePriceController = TextEditingController(
         text: NumberFormat("0.00").format(widget.purchaseEntry.totalPurchasePrice));
     _supplierNameController =
         TextEditingController(text: widget.purchaseEntry.supplierName ?? '');
-    _selectedDate = widget.purchaseEntry.purchaseDate.toDate();
+    _selectedDate = widget.purchaseEntry.createdAt.toDate(); // Changed from purchaseDate
     _selectedUnit = widget.purchaseEntry.unit;
     if (!_unitOptions.contains(_selectedUnit)) {
       _unitOptions.add(_selectedUnit);
     }
-
     double initialPricePerUnit = widget.purchaseEntry.purchasePricePerUnit;
-    if ((initialPricePerUnit.abs() < 0.001) && widget.purchaseEntry.quantity > 0 && widget.purchaseEntry.totalPurchasePrice > 0) {
-      initialPricePerUnit = widget.purchaseEntry.totalPurchasePrice / widget.purchaseEntry.quantity;
+    if ((initialPricePerUnit.abs() < 0.001) && widget.purchaseEntry.quantityPurchased > 0 && widget.purchaseEntry.totalPurchasePrice > 0) {
+      initialPricePerUnit = widget.purchaseEntry.totalPurchasePrice / widget.purchaseEntry.quantityPurchased; // Changed from quantity
     }
     _purchasePricePerUnitController = TextEditingController(
         text: initialPricePerUnit > 0 ? NumberFormat("0.00").format(initialPricePerUnit) : '');
@@ -62,11 +62,13 @@ class _EditPurchaseEntryFormScreenState
     _purchasePricePerUnitController.addListener(_calculateAndDisplayTotal);
 
     _calculateAndDisplayTotal();
+    // Ensure productId is handled if it's new or needs to be displayed/used
+    // print("Editing entry with productId: ${widget.purchaseEntry.productId}");
   }
 
   void _calculateAndDisplayTotal() {
-    final double quantity = double.tryParse(_quantityController.text.trim()) ?? 0;
-    final double pricePerUnit = double.tryParse(_purchasePricePerUnitController.text.trim()) ?? 0;
+    final double quantity = double.tryParse(_quantityController.text.trim()) ?? 0.0;
+    final double pricePerUnit = double.tryParse(_purchasePricePerUnitController.text.trim()) ?? 0.0;
 
     if (quantity > 0 && pricePerUnit > 0) {
       final double total = quantity * pricePerUnit;
@@ -107,22 +109,24 @@ class _EditPurchaseEntryFormScreenState
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
 
-      final String productName = _productNameController.text.trim(); 
-      final String sku = _skuController.text.trim(); 
-      final double? quantity = double.tryParse(_quantityController.text.trim());
+      final String productName = _productNameController.text.trim();
+      final String sku = _skuController.text.trim();
+      // Parse as int for quantityPurchased
+      final int? quantity = int.tryParse(_quantityController.text.trim());
       final double? purchasePricePerUnit = double.tryParse(_purchasePricePerUnitController.text.trim());
       final String supplierName = _supplierNameController.text.trim();
 
       if (quantity == null || quantity <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter a valid quantity.')),
+          const SnackBar(content: Text('Please enter a valid whole number for quantity.')),
         );
         return;
       }
 
       if (purchasePricePerUnit == null || purchasePricePerUnit <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter a valid purchase price per unit.')),
+          const SnackBar(
+              content: Text('Please enter a valid purchase price per unit.')),
         );
         return;
       }
@@ -137,14 +141,15 @@ class _EditPurchaseEntryFormScreenState
             .collection('purchase_entries')
             .doc(widget.purchaseEntry.id)
             .update({
+          'productId': widget.purchaseEntry.productId, // Ensure productId is updated
           'productName': productName,
           'sku': sku,
-          'quantity': quantity,
+          'quantityPurchased': quantity, // Changed from quantity
           'unit': _selectedUnit,
           'purchasePricePerUnit': purchasePricePerUnit,
           'totalPurchasePrice': totalPurchasePrice,
           'supplierName': supplierName.isEmpty ? null : supplierName,
-          'purchaseDate': Timestamp.fromDate(_selectedDate),
+          'createdAt': Timestamp.fromDate(_selectedDate), // Changed from purchaseDate
           'shopId': widget.purchaseEntry.shopId, // Preserve existing shopId from the entry itself
           'userId': widget.purchaseEntry.userId, // Preserve existing userId from the entry itself
         });
@@ -282,13 +287,17 @@ class _EditPurchaseEntryFormScreenState
                     if (value == null || value.trim().isEmpty) {
                       return 'Please enter quantity';
                     }
-                    final n = double.tryParse(value.trim());
+                    final n = double.tryParse(value.trim()); // Validator can still allow double for initial check
                     if (n == null) {
                       return 'Please enter a valid number';
                     }
                     if (n <= 0) {
                       return 'Quantity must be positive';
                     }
+                    // Optional: Add a check for whole number if strictly required by validator
+                    // if (n != n.truncate()) {
+                    //   return 'Quantity must be a whole number';
+                    // }
                     return null;
                   },
                 ),
