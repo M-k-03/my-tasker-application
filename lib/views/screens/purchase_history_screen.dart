@@ -44,20 +44,20 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
     bool otherFiltersActive = false;
 
     if (filters['startDate'] != null) {
-      query = query.where('purchaseDate', isGreaterThanOrEqualTo: filters['startDate']);
+      query = query.where('purchaseDate', isGreaterThanOrEqualTo: filters['startDate']); // CHANGED: Query 'purchaseDate'
       otherFiltersActive = true;
     }
     if (filters['endDate'] != null) {
       // To include the whole day, adjust the endDate
       DateTime endDateForQuery = filters['endDate'];
       endDateForQuery = DateTime(endDateForQuery.year, endDateForQuery.month, endDateForQuery.day, 23, 59, 59);
-      query = query.where('purchaseDate', isLessThanOrEqualTo: endDateForQuery);
+      query = query.where('purchaseDate', isLessThanOrEqualTo: endDateForQuery); // CHANGED: Query 'purchaseDate'
       otherFiltersActive = true;
     }
     if (filters['supplierName'] != null && (filters['supplierName'] as String).isNotEmpty) {
       String supplierNameTerm = filters['supplierName'] as String;
       print("Querying for supplierName: '$supplierNameTerm'");
-      query = query.where('supplierName', isEqualTo: supplierNameTerm);
+      query = query.where('supplierName', isEqualTo: supplierNameTerm); // Ensure 'supplierName' field exists and case matches
       otherFiltersActive = true;
     }
     if (filters['productSearch'] != null && (filters['productSearch'] as String).isNotEmpty) {
@@ -67,13 +67,9 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
       hasProductNameFilter = true; // Set flag
     }
 
-    // Conditionally apply orderBy
-    if (hasProductNameFilter && !otherFiltersActive) {
-      // If ONLY product name filter is active, temporarily don't order by purchaseDate for this test.
-      print("TEST: Product name filter is active ALONE, not ordering by purchaseDate for this test.");
-    } else {
-      query = query.orderBy('purchaseDate', descending: true);
-    }
+    // Always order by purchaseDate for consistent history view.
+    // Firestore will require composite indexes if other filters are applied.
+    query = query.orderBy('purchaseDate', descending: true); // CHANGED: Order by 'purchaseDate' consistently
 
     return query.snapshots().map((snapshot) {
       if (snapshot.docs.isEmpty && hasProductNameFilter && !otherFiltersActive) {
@@ -248,8 +244,10 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
                   itemCount: entries.length,
                   itemBuilder: (context, index) {
                     PurchaseEntryItem entry = entries[index];
+                    // Assuming entry.createdAt is correctly mapped to 'purchaseDate' from Firestore
+                    // in your PurchaseEntryItem model.
                     String formattedDate = DateFormat('dd MMM yyyy, hh:mm a')
-                        .format(entry.purchaseDate.toDate());
+                        .format(entry.createdAt.toDate());
 
                     return Card(
                       elevation: 3,
@@ -262,7 +260,7 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Qty: ${entry.quantity} ${entry.unit}'),
+                            Text('Qty: ${entry.quantityPurchased} ${entry.unit}'),
                             if (entry.supplierName != null &&
                                 entry.supplierName!.isNotEmpty)
                               Text('Supplier: ${entry.supplierName}'),

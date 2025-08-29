@@ -1,66 +1,78 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// Model class to represent a purchase entry item
 class PurchaseEntryItem {
   final String id;
+  final String productId; // Added
   final String productName;
   final String sku;
-  final double quantity;
+  final int quantityPurchased; // Changed from double quantity
   final String unit;
   final String? supplierName;
-  final Timestamp purchaseDate;
+  final Timestamp purchaseDate; // Added to read the actual purchaseDate field
+  final Timestamp createdAt; // For existing createdAt field or future use
   final double totalPurchasePrice;
   final double purchasePricePerUnit;
-  final String shopId; // Added
-  final String userId; // Added
+  final String shopId;
+  final String userId; // Added userId field
+  final Timestamp? expiryDate;
+  final String? notes; // Added for notes
 
   PurchaseEntryItem({
     required this.id,
+    required this.productId, // Added
     required this.productName,
     required this.sku,
-    required this.quantity,
+    required this.quantityPurchased,
     required this.unit,
     this.supplierName,
     required this.purchaseDate,
+    required this.createdAt,
     required this.totalPurchasePrice,
     required this.purchasePricePerUnit,
-    required this.shopId, // Added
-    required this.userId, // Added
+    required this.userId, // Added to constructor
+    required this.shopId,
+    this.expiryDate,
+    this.notes, // Added for notes
   });
 
-  factory PurchaseEntryItem.fromSnapshot(DocumentSnapshot doc) {
-    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+  factory PurchaseEntryItem.fromSnapshot(DocumentSnapshot snapshot) {
+    final data = snapshot.data() as Map<String, dynamic>;
     return PurchaseEntryItem(
-      id: doc.id,
+      id: snapshot.id,
+      productId: data['productId'] as String? ?? '', // Added
       productName: data['productName'] ?? 'N/A',
       sku: data['sku'] ?? 'N/A',
-      quantity: (data['quantity'] as num?)?.toDouble() ?? 0.0,
+      // Read from the 'quantity' field in Firestore
+      quantityPurchased: (data['quantity'] as num?)?.toInt() ?? 0, // CHANGED: Read from 'quantity'
       unit: data['unit'] ?? 'units', // Default to 'units' if not present
       supplierName: data['supplierName'],
-      purchaseDate: data['purchaseDate'] as Timestamp? ?? Timestamp.now(), // Handle potential null
+      purchaseDate: data['purchaseDate'] as Timestamp? ?? Timestamp.now(), // Read from 'purchaseDate'
+      createdAt: data['createdAt'] as Timestamp? ?? data['purchaseDate'] as Timestamp? ?? Timestamp.now(), // Fallback for createdAt
       totalPurchasePrice: (data['totalPurchasePrice'] as num?)?.toDouble() ?? 0.0,
       purchasePricePerUnit: (data['purchasePricePerUnit'] as num?)?.toDouble() ?? 0.0,
-      // For shopId and userId, default to empty string if not present in older documents.
-      // Consider a more robust handling strategy if these are critical for all items.
-      shopId: data['shopId'] as String? ?? '', 
-      userId: data['userId'] as String? ?? '',
+      shopId: data['shopId'] as String? ?? '',
+      userId: data['userId'] as String? ?? '', // Read userId
+      expiryDate: data['expiryDate'] as Timestamp?,
+      notes: data['notes'] as String?, // Added for notes
     );
   }
 
-  // If you also convert PurchaseEntryItem objects to a Map for saving to Firestore,
-  // you would add/update a toMap() method here:
-  // Map<String, dynamic> toMap() {
-  //   return {
-  //     'productName': productName,
-  //     'sku': sku,
-  //     'quantity': quantity,
-  //     'unit': unit,
-  //     'supplierName': supplierName,
-  //     'purchaseDate': purchaseDate,
-  //     'totalPurchasePrice': totalPurchasePrice,
-  //     'purchasePricePerUnit': purchasePricePerUnit,
-  //     'shopId': shopId,
-  //     'userId': userId,
-  //   };
-  // }
+  Map<String, dynamic> toMap() {
+    return {
+      'productId': productId, // Added
+      'productName': productName,
+      'sku': sku,
+      'quantityPurchased': quantityPurchased,
+      'unit': unit,
+      'purchaseDate': purchaseDate,
+      'supplierName': supplierName,
+      'createdAt': createdAt,
+      'totalPurchasePrice': totalPurchasePrice,
+      'purchasePricePerUnit': purchasePricePerUnit,
+      'userId': userId, // Add userId to map
+      'shopId': shopId,
+      'expiryDate': expiryDate,
+      'notes': notes, // Added for notes
+    };
+  }
 }

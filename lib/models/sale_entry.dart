@@ -8,7 +8,7 @@ class SaleEntry {
   final int quantitySold;
   final double pricePerUnitAtSale;
   final double totalAmountForProduct;
-  final Timestamp saleTimestamp;
+  final Timestamp createdAt; // Renamed from saleTimestamp
   final String shopId; // Added
   final String userId; // Added
 
@@ -20,7 +20,7 @@ class SaleEntry {
     required this.quantitySold,
     required this.pricePerUnitAtSale,
     required this.totalAmountForProduct,
-    required this.saleTimestamp,
+    required this.createdAt, // Renamed
     required this.shopId, // Added
     required this.userId, // Added
   });
@@ -33,25 +33,28 @@ class SaleEntry {
       'quantitySold': quantitySold,
       'pricePerUnitAtSale': pricePerUnitAtSale,
       'totalAmountForProduct': totalAmountForProduct,
-      'saleTimestamp': saleTimestamp,
+      'createdAt': createdAt, // Renamed
       'shopId': shopId, // Added
       'userId': userId,   // Added
     };
   }
 
-  // Consider adding a factory constructor if you need to create SaleEntry from a map
-  // factory SaleEntry.fromMap(Map<String, dynamic> map, String documentId) {
-  //   return SaleEntry(
-  //     id: documentId,
-  //     productId: map['productId'],
-  //     productName: map['productName'],
-  //     sku: map['sku'],
-  //     quantitySold: map['quantitySold'],
-  //     pricePerUnitAtSale: map['pricePerUnitAtSale'],
-  //     totalAmountForProduct: map['totalAmountForProduct'],
-  //     saleTimestamp: map['saleTimestamp'],
-  //     shopId: map['shopId'],
-  //     userId: map['userId'],
-  //   );
-  // }
+  factory SaleEntry.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+    if (data == null) {
+      throw Exception("SaleEntry data is null for document ${doc.id}");
+    }
+    return SaleEntry(
+      id: doc.id,
+      productId: data['productId'] as String? ?? '',
+      productName: data['productName'] as String? ?? '',
+      sku: data['sku'] as String?, // sku can be null
+      quantitySold: data['quantitySold'] as int? ?? 0,
+      pricePerUnitAtSale: (data['pricePerUnitAtSale'] as num?)?.toDouble() ?? 0.0,
+      totalAmountForProduct: (data['totalAmountForProduct'] as num?)?.toDouble() ?? 0.0,
+      createdAt: data['createdAt'] as Timestamp? ?? Timestamp.now(), // Renamed and reading 'createdAt'
+      shopId: data['shopId'] as String? ?? '',
+      userId: data['userId'] as String? ?? '',
+    );
+  }
 }
